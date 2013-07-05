@@ -11,6 +11,8 @@ export Blocks
 
 export pmap, pmapreduce
 
+include("blocks.jl")
 include("mapreduce.jl")
+include("blocked_dataframe.jl")
 
 end
