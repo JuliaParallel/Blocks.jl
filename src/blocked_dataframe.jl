@@ -31,7 +31,7 @@ pmap{T<:File,D<:DataFrame}(m, bf::Blocks{T,D}...; kwargs...) = pmap_base(x->_mf_
 pmap{T<:DDataFrame,D<:DataFrame}(m, bf::Blocks{T,D}...) = pmap_base((x...)->m([fetch(y) for y in x]...), bf...)
 
 # internal methods
-function _dims(dt::DDataFrame)
+function _dims(dt::DDataFrame, rows::Bool=true, cols::Bool=true)
     dt.nrows = pmap(x->nrow(x), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
     #dt.ncols = remotecall_fetch(dt.procs[1], ncol, dt.rrefs[1])
     cnames = remotecall_fetch(dt.procs[1], (x)->colnames(fetch(x)), dt.rrefs[1])
@@ -70,7 +70,7 @@ end
 # Operations on Distributed DataFrames
 # TODO: colmedians, colstds, colvars, colffts, colnorms
 
-for f in [DataFrames.elementary_functions, DataFrames.unary_operators, :copy, :deepcopy]
+for f in [DataFrames.elementary_functions, DataFrames.unary_operators, :copy, :deepcopy, :isfinite, :isnan]
     @eval begin
         function ($f)(dt::DDataFrame)
             rrefs = pmap(x->_ref(($f)(x)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
@@ -78,6 +78,29 @@ for f in [DataFrames.elementary_functions, DataFrames.unary_operators, :copy, :d
         end
     end
 end
+
+for f in [:without]
+    @eval begin
+        function ($f)(dt::DDataFrame, p1)
+            rrefs = pmap(x->_ref(($f)(x, p1)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+            DDataFrame(rrefs, dt.procs)
+        end
+    end
+end
+
+with(dt::DDataFrame, c::Expr) = vcat(pmap(x->with(x, c), Blocks(dt, DataFrame, dt.rrefs, dt.procs))...)
+with(dt::DDataFrame, c::Symbol) = vcat(pmap(x->with(x, c), Blocks(dt, DataFrame, dt.rrefs, dt.procs))...)
+
+function delete!(dt::DDataFrame, c)
+    pmap(x->begin delete!(x,c); nothing; end, Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    _dims(dt, false, true)
+end
+function within!(dt::DDataFrame, c::Expr)
+    pmap(x->begin within!(x,c); nothing; end, Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    _dims(dt, false, true)
+end
+
+
 
 for f in DataFrames.binary_operators
     @eval begin
@@ -151,6 +174,11 @@ colnames(dt::DDataFrame) = dt.colindex.names
 function colnames!(dt::DDataFrame, vals) 
     pmap(x->colnames!(x, vals), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
     names!(dt.colindex, vals)
+end
+function clean_colnames!(dt::DDataFrame)
+    new_names = map(n -> replace(n, r"\W", "_"), colnames(dt))
+    colnames!(dt, new_names)
+    return
 end
 
 for f in [:rename, :rename!]
