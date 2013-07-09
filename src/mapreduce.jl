@@ -58,7 +58,12 @@ function _mf_file_io(m::Function, x::Tuple)
     bio = BlockIO(open(x[1]), x[2])
     m(bio)
 end
-
+function _mf_file_lines(m::Function, x::Tuple)
+    bio = BlockIO(open(x[1]), x[2], '\n')
+    m(readlines(bio))
+end 
+        
+pmap{T<:File,D<:Array}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_lines(m,x), bf...)
 pmap{T<:File,D<:IO}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_io(m,x), bf...)
 pmap{T<:Array,D<:Array}(m, bf::Blocks{T,D}...) = pmap_base(m, bf...)
 

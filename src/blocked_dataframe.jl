@@ -12,8 +12,12 @@ end
 
 show(io::IO, dt::DDataFrame) = println("DDataFrame. $(length(dt.rrefs)) blocks over $(length(union(dt.procs))) processors")
 
+gather(dt::DDataFrame) = reduce((x,y)->vcat(fetch(x), fetch(y)), dt.rrefs) 
+#convert(::Type{DataFrame}, dt::DDataFrame) = reduce((x,y)->vcat(fetch(x), fetch(y)), dt.rrefs) 
+
 function Blocks{T<:DataFrame}(f::File, outtype::T, nsplits::Int=0)
     sz = filesize(f.path)
+    (0 == sz) && error("file not found")
     (nsplits == 0) && (nsplits = nworkers())
     splits = Base.splitrange(sz, nsplits)
     data = [(f.path, x) for x in splits]
@@ -201,5 +205,19 @@ for f in [:vcat, :hcat, :rbind, :cbind]
             DDataFrame(rrefs, procs)   
         end
     end
+end
+
+function merge(dt::DDataFrame, t::DataFrame, bycol, jointype)
+    (jointype != "inner") && error("only inner joins are supported")
+    
+    rrefs = pmap((x)->_ref(merge(x,t)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    DDataFrame(rrefs, dt.procs)
+end
+
+function merge(t::DataFrame, dt::DDataFrame, bycol, jointype)
+    (jointype != "inner") && error("only inner joins are supported")
+    
+    rrefs = pmap((x)->_ref(merge(t,x)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    DDataFrame(rrefs, dt.procs)
 end
 
