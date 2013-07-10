@@ -36,7 +36,7 @@ pmap{T<:DDataFrame,D<:DataFrame}(m, bf::Blocks{T,D}...) = pmap_base((x...)->m([f
 
 # internal methods
 function _dims(dt::DDataFrame, rows::Bool=true, cols::Bool=true)
-    dt.nrows = pmap(x->nrow(x), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    dt.nrows = pmap(x->nrow(x), _blk(dt))
     #dt.ncols = remotecall_fetch(dt.procs[1], ncol, dt.rrefs[1])
     cnames = remotecall_fetch(dt.procs[1], (x)->colnames(fetch(x)), dt.rrefs[1])
     dt.ncols = length(cnames)
@@ -83,7 +83,7 @@ _blk(dt::DDataFrame) = Blocks(dt, DataFrame, dt.rrefs, dt.procs)
 for f in [DataFrames.elementary_functions, DataFrames.unary_operators, :copy, :deepcopy, :isfinite, :isnan]
     @eval begin
         function ($f)(dt::DDataFrame)
-            rrefs = pmap(x->_ref(($f)(x)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+            rrefs = pmap(x->_ref(($f)(x)), _blk(dt))
             DDataFrame(rrefs, dt.procs)
         end
     end
@@ -92,21 +92,21 @@ end
 for f in [:without]
     @eval begin
         function ($f)(dt::DDataFrame, p1)
-            rrefs = pmap(x->_ref(($f)(x, p1)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+            rrefs = pmap(x->_ref(($f)(x, p1)), _blk(dt))
             DDataFrame(rrefs, dt.procs)
         end
     end
 end
 
-with(dt::DDataFrame, c::Expr) = vcat(pmap(x->with(x, c), Blocks(dt, DataFrame, dt.rrefs, dt.procs))...)
-with(dt::DDataFrame, c::Symbol) = vcat(pmap(x->with(x, c), Blocks(dt, DataFrame, dt.rrefs, dt.procs))...)
+with(dt::DDataFrame, c::Expr) = vcat(pmap(x->with(x, c), _blk(dt))...)
+with(dt::DDataFrame, c::Symbol) = vcat(pmap(x->with(x, c), _blk(dt))...)
 
 function delete!(dt::DDataFrame, c)
-    pmap(x->begin delete!(x,c); nothing; end, Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    pmap(x->begin delete!(x,c); nothing; end, _blk(dt))
     _dims(dt, false, true)
 end
 function within!(dt::DDataFrame, c::Expr)
-    pmap(x->begin within!(x,c); nothing; end, Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    pmap(x->begin within!(x,c); nothing; end, _blk(dt))
     _dims(dt, false, true)
 end
 
@@ -115,11 +115,11 @@ end
 for f in DataFrames.binary_operators
     @eval begin
         function ($f)(dt::DDataFrame, x::Union(Number, NAtype))
-            rrefs = pmap(y->_ref(($f)(y,x)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+            rrefs = pmap(y->_ref(($f)(y,x)), _blk(dt))
             DDataFrame(rrefs, dt.procs)
         end
         function ($f)(x::Union(Number, NAtype), dt::DDataFrame)
-            rrefs = pmap(y->_ref(($f)(x,y)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+            rrefs = pmap(y->_ref(($f)(x,y)), _blk(dt))
             DDataFrame(rrefs, dt.procs)
         end
     end
@@ -129,18 +129,18 @@ for (f,_) in DataFrames.vectorized_comparison_operators
     for t in [:Number, :String, :NAtype]
         @eval begin
             function ($f){T <: ($t)}(dt::DDataFrame, x::T)
-                rrefs = pmap(y->_ref(($f)(y,x)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+                rrefs = pmap(y->_ref(($f)(y,x)), _blk(dt))
                 DDataFrame(rrefs, dt.procs)
             end
             function ($f){T <: ($t)}(x::T, dt::DDataFrame)
-                rrefs = pmap(y->_ref(($f)(x,y)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+                rrefs = pmap(y->_ref(($f)(x,y)), _blk(dt))
                 DDataFrame(rrefs, dt.procs)
             end
         end
     end
     @eval begin
         function ($f)(a::DDataFrame, b::DDataFrame)
-            rrefs = pmap((x,y)->_ref(($f)(x,y)), Blocks(a, DataFrame, a.rrefs, a.procs), Blocks(b, DataFrame, b.rrefs, b.procs))
+            rrefs = pmap((x,y)->_ref(($f)(x,y)), _blk(a), _blk(b))
             DDataFrame(rrefs, a.procs)
         end
     end
@@ -149,7 +149,7 @@ end
 for f in (:colmins, :colmaxs, :colprods, :colsums, :colmeans)
     @eval begin
         function ($f)(dt::DDataFrame)
-            ($f)(vcat(pmap(x->($f)(x), Blocks(dt, DataFrame, dt.rrefs, dt.procs))...))
+            ($f)(vcat(pmap(x->($f)(x), _blk(dt))...))
         end
     end
 end    
@@ -158,7 +158,7 @@ for f in DataFrames.array_arithmetic_operators
     @eval begin
         function ($f)(a::DDataFrame, b::DDataFrame)
             # TODO: check dimensions
-            rrefs = pmap((x,y)->_ref(($f)(x,y)), Blocks(a, DataFrame, a.rrefs, a.procs), Blocks(b, DataFrame, b.rrefs, b.procs))
+            rrefs = pmap((x,y)->_ref(($f)(x,y)), _blk(a), _blk(b))
             DDataFrame(rrefs, a.procs)
         end
     end
@@ -167,13 +167,13 @@ end
 for f in [:all, :any]
     @eval begin
         function ($f)(dt::DDataFrame)
-            ($f)(pmap(x->($f)(x), Blocks(dt, DataFrame, dt.rrefs, dt.procs)))
+            ($f)(pmap(x->($f)(x), _blk(dt)))
         end
     end
 end
 
 function isequal(a::DDataFrame, b::DDataFrame)
-    all(pmap((x,y)->isequal(x,y), Blocks(a, DataFrame, a.rrefs, a.procs), Blocks(b, DataFrame, b.rrefs, b.procs)))
+    all(pmap((x,y)->isequal(x,y), _blk(a), _blk(b)))
 end
 
 nrow(dt::DDataFrame) = sum(dt.nrows)
@@ -182,7 +182,7 @@ head(dt::DDataFrame) = remotecall_fetch(dt.procs[1], x->head(fetch(x)), dt.rrefs
 tail(dt::DDataFrame) = remotecall_fetch(dt.procs[end], x->tail(fetch(x)), dt.rrefs[end])
 colnames(dt::DDataFrame) = dt.colindex.names
 function colnames!(dt::DDataFrame, vals) 
-    pmap(x->colnames!(x, vals), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    pmap(x->colnames!(x, vals), _blk(dt))
     names!(dt.colindex, vals)
 end
 function clean_colnames!(dt::DDataFrame)
@@ -194,7 +194,7 @@ end
 for f in [:rename, :rename!]
     @eval begin
         function ($f)(dt::DDataFrame, from, to)
-            pmap(x->_ref(($f)(x, from, to)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+            pmap(x->_ref(($f)(x, from, to)), _blk(dt))
             ($f)(dt.colindex, from, to)
         end
     end
@@ -206,7 +206,7 @@ index(dt::DDataFrame) = dt.colindex
 for f in [:vcat, :hcat, :rbind, :cbind]
     @eval begin
         function ($f)(dt::DDataFrame...)
-            rrefs = pmap((x...)->_ref(($f)(x...)), [Blocks(a, DataFrame, a.rrefs, a.procs) for a in dt]...)
+            rrefs = pmap((x...)->_ref(($f)(x...)), [_blk(a) for a in dt]...)
             procs = dt[1].procs
             DDataFrame(rrefs, procs)   
         end
@@ -216,14 +216,14 @@ end
 function merge(dt::DDataFrame, t::DataFrame, bycol, jointype)
     (jointype != "inner") && error("only inner joins are supported")
     
-    rrefs = pmap((x)->_ref(merge(x,t)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    rrefs = pmap((x)->_ref(merge(x,t)), _blk(dt))
     DDataFrame(rrefs, dt.procs)
 end
 
 function merge(t::DataFrame, dt::DDataFrame, bycol, jointype)
     (jointype != "inner") && error("only inner joins are supported")
     
-    rrefs = pmap((x)->_ref(merge(t,x)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
+    rrefs = pmap((x)->_ref(merge(t,x)), _blk(dt))
     DDataFrame(rrefs, dt.procs)
 end
 
