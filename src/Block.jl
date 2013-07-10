@@ -18,7 +18,7 @@ export      Blocks,
             head, tail, vcat, hcat, rbind, cbind, copy, deepcopy, isfinite, isnan,
             without, delete!, with, within!,
             gather, 
-            merge
+            merge, colwise, by
 # TODO:
 # complete_cases, complete_cases!, duplicated, drop_duplicates!
 include("blocks.jl")

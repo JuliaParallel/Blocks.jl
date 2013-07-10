@@ -42,6 +42,10 @@ function _dims(dt::DDataFrame, rows::Bool=true, cols::Bool=true)
     dt.ncols = length(cnames)
     dt.colindex = Index(cnames)
     dt.coltypes = remotecall_fetch(dt.procs[1], (x)->coltypes(fetch(x)), dt.rrefs[1])
+    # propagate the column names
+    for nidx in 2:length(dt.procs)
+        remotecall(dt.procs[nidx], x->colnames!(fetch(x), cnames), dt.rrefs[nidx])
+    end
     dt
 end
 
@@ -69,6 +73,8 @@ function _ref(x)
     put(r,x)
     r
 end
+
+_blk(dt::DDataFrame) = Blocks(dt, DataFrame, dt.rrefs, dt.procs)
 
 
 # Operations on Distributed DataFrames
@@ -220,4 +226,45 @@ function merge(t::DataFrame, dt::DDataFrame, bycol, jointype)
     rrefs = pmap((x)->_ref(merge(t,x)), Blocks(dt, DataFrame, dt.rrefs, dt.procs))
     DDataFrame(rrefs, dt.procs)
 end
+
+colwise(f::Function, dt::DDataFrame) = error("Not supported. Try colwise variant meant for DDataFrame instead.")
+colwise(fns::Vector{Function}, dt::DDataFrame) = error("Not supported. Try colwise variant meant for DDataFrame instead.")
+colwise(d::DDataFrame, s::Vector{Symbol}, cn::Vector) = error("Not supported. Try colwise variant meant for DDataFrame instead.")
+
+function colwise(f::Function, r::Function, dt::DDataFrame)
+    resarr = pmap((x)->colwise(f,x), _blk(dt))
+    combined = hcat(resarr...)
+    map(x->r([combined[x, :]...]), 1:size(combined,1))
+end
+function colwise(fns::Vector{Function}, rfns::Vector{Function}, dt::DDataFrame) 
+    nfns = length(fns)
+    (nfns != length(rfns)) && error("number of operations must match number of reduce operations")
+    resarr = pmap((x)->colwise(fns,x), _blk(dt))
+    combined = hcat(resarr...)
+    map(x->(rfns[x%nfns=1])([combined[x, :]...]), 1:size(combined,1))
+end
+function colwise(dt::DDataFrame, s::Vector{Symbol}, reduces::Vector{Function}, cn::Vector)
+    nfns = length(s)
+    (nfns != length(reduces)) && error("number of operations must match number of reduce operations")
+    resarr = pmap((x)->colwise(x, s, cn), _blk(dt))
+    combined = vcat(resarr...)
+    resdf = DataFrame()
+    
+    for (idx,(colname,col)) in enumerate(combined)
+        resdf[colname] = (reduces[idx%nfns+1])(col)
+    end
+    resdf
+end
+
+by(dt::DDataFrame, cols, f::Function) = error("Not supported. Try by variant meant for DDataFrame instead.")
+by(dt::DDataFrame, cols, e::Expr) = error("Not supported. Try by variant meant for DDataFrame instead.")
+by(dt::DDataFrame, cols, s::Vector{Symbol}) = error("Not supported. Try by variant meant for DDataFrame instead.")
+by(dt::DDataFrame, cols, s::Symbol) = error("Not supported. Try by variant meant for DDataFrame instead.")
+
+function by(dt::DDataFrame, cols, f, reducer::Function)
+    resarr = pmap((x)->by(x, cols, f), _blk(dt))
+    combined = vcat(resarr...)
+    by(combined, cols, x->reducer(x[end]))
+end
+
 
