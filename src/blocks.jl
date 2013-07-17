@@ -57,6 +57,7 @@ end
 
 function Blocks(f::File, outtype::Type, nsplits::Int=0)
     sz = filesize(f.path)
+    (sz == 0) && error("missing or empty file: $(f.path)")
     (nsplits == 0) && (nsplits = nworkers())
     splits = Base.splitrange(sz, nsplits)
     data = [(f.path, x) for x in splits]

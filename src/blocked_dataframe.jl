@@ -10,7 +10,7 @@ type DDataFrame <: AbstractDataFrame
     DDataFrame(rrefs::Vector, procs::Vector) = _dims(new(rrefs, procs))
 end
 
-show(io::IO, dt::DDataFrame) = println("DDataFrame. $(length(dt.rrefs)) blocks over $(length(union(dt.procs))) processors")
+show(io::IO, dt::DDataFrame) = println("$(nrow(dt))x$(ncol(dt)) DDataFrame. $(length(dt.rrefs)) blocks over $(length(union(dt.procs))) processors")
 
 gather(dt::DDataFrame) = reduce((x,y)->vcat(fetch(x), fetch(y)), dt.rrefs) 
 #convert(::Type{DataFrame}, dt::DDataFrame) = reduce((x,y)->vcat(fetch(x), fetch(y)), dt.rrefs) 
@@ -51,18 +51,24 @@ end
 
 function _mf_file_dataframe(m::Function, x::Tuple; kwargs...)
     r = x[2]
-    bio = BlockIO(open(x[1]), r, '\n')
-
     hdr = (:header,true)
     hdrnames = []
-    for (idx,x) in enumerate(kwargs)
-        (x[1]==:header) && (hdr=splice!(kwargs, idx); break)
+    for (idx,kw) in enumerate(kwargs)
+        (kw[1]==:header) && (hdr=splice!(kwargs, idx); break)
     end
 
     isa(hdr[2],Tuple) && (hdrnames = (hdr[2])[2]; hdr = (:header,(hdr[2])[1]))
     push!(kwargs, hdr[2] ? (:header,(1==r.start)) : hdr)
-    
-    tbl = readtable(bio; kwargs...)
+   
+    bio = BlockIO(open(x[1]), r, '\n')
+    iob = IOBuffer(read(bio, Array(Uint8, filesize(bio))))
+    f = open("ttt_"*string(myid()), "w")
+    seekstart(bio)
+    write(f, read(bio, Array(Uint8, filesize(bio))))
+    close(f)
+    tbl = readtable(iob; kwargs...)
+    close(iob)
+
     (hdrnames != []) && colnames!(tbl, hdrnames)
     m(tbl)
 end
@@ -105,9 +111,41 @@ function delete!(dt::DDataFrame, c)
     pmap(x->begin delete!(x,c); nothing; end, _blk(dt))
     _dims(dt, false, true)
 end
+
+function deleterows!(dt::DDataFrame, keep_inds::Vector{Int})
+    # split keep_inds based on index ranges
+    split_inds = {}
+    beg_row = 1
+    for idx in 1:length(dt.nrows)
+        end_row = dt.nrows[idx]
+        part_rows = filter(x->(beg_row <= x <= (beg_row+end_row-1)), keep_inds) .- (beg_row-1)
+        push!(split_inds, remotecall_fetch(dt.procs[idx], x->_ref(DataFrame(x)), part_rows))
+        #push!(split_inds, part_rows)
+        beg_row = end_row+1
+    end
+    dt_keep_inds = DDataFrame(split_inds, dt.procs)
+    
+    # pmap
+    pmap((x,y)->begin DataFrames.deleterows!(x,y[1].data); nothing; end, _blk(dt), _blk(dt_keep_inds))
+    # calculate dims again
+    _dims(dt, true, false)
+end
+
 function within!(dt::DDataFrame, c::Expr)
     pmap(x->begin within!(x,c); nothing; end, _blk(dt))
     _dims(dt, false, true)
+end
+
+for f in (:isna, :complete_cases)
+    @eval begin
+        function ($f)(dt::DDataFrame)
+            vcat(pmap(x->($f)(x), _blk(dt))...)
+        end
+    end
+end    
+function complete_cases!(dt::DDataFrame)
+    pmap(x->begin complete_cases!(x); nothing; end, _blk(dt))
+    _dims(dt, true, true)
 end
 
 
@@ -267,4 +305,41 @@ function by(dt::DDataFrame, cols, f, reducer::Function)
     by(combined, cols, x->reducer(x[end]))
 end
 
+
+dwritetable(path::String, suffix::String, dt::DDataFrame; kwargs...) = pmap(x->begin; fn=joinpath(path, string(myid())*"."*suffix); writetable(fn, x; kwargs...); fn; end, _blk(dt))
+
+function writetable(filename::String, dt::DDataFrame, do_gather::Bool=false; kwargs...)
+    do_gather && (return writetable(filename, gather(dt); kwargs...))
+
+    hdr = (:header,true)
+    hdrnames = []
+    for (idx,kw) in enumerate(kwargs)
+        (kw[1]==:header) && (hdr=splice!(kwargs, idx); break)
+    end
+    push!(kwargs, (:header,false))
+
+    basen = basename(filename)
+    path = filename[1:(length(filename)-length(basename(filename)))]
+    filenames = dwritetable(path, basen, dt, header=false)
+
+    if hdr[2]
+        h = DataFrame()
+        for cns in colnames(dt) h[cns] = [] end
+        writetable(filename, h)
+    end
+    f = open(filename, hdr[2] ? "a" : "w")
+
+    const lb = 1024*16
+    buff = Array(Uint8, lb)
+    for fn in filenames
+        fp = open(fn)
+        while(!eof(fp))
+            avlb = nb_available(fp)
+            write(f, read(fp, (avlb < lb) ? Array(Uint8, avlb) : buff))
+        end
+        close(fp)
+        rm(fn)
+    end
+    close(f)
+end
 

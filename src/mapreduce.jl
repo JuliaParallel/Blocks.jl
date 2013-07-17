@@ -63,7 +63,7 @@ function _mf_file_lines(m::Function, x::Tuple)
     m(readlines(bio))
 end 
         
-pmap{T<:File,D<:Array}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_lines(m,x), bf...)
+pmap{T<:File,D<:Vector{String}}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_lines(m,x), bf...)
 pmap{T<:File,D<:IO}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_io(m,x), bf...)
 pmap{T<:Array,D<:Array}(m, bf::Blocks{T,D}...) = pmap_base(m, bf...)
 

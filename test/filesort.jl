@@ -54,7 +54,7 @@ function sort_step_2(workfile::String, block_files::Array, nway::Int=0)
 end
 
 function sort_step_1(workfile::String, n::Int)
-    b = Blocks(File(workfile), Array, n)
+    b = Blocks(File(workfile), Vector{String}, n)
     block_files = pmap(c->begin 
         fname = tmpf(workfile)
         io = open(fname, "w")
