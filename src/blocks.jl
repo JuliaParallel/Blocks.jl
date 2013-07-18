@@ -4,11 +4,11 @@ abstract AbstractBlocks{T,D}
 #   - non-streaming
 #   - accessible in parallel
 #   - distributed across processors
-type Blocks{T,D} <: AbstractBlocks{T,D}
+type Blocks{T} <: AbstractBlocks{T}
     source::T
-    outtype::Type{D}
-    block::Array
-    affinity::Array
+    filter::Function        # returns a processed block. can be chained. default just passes the chunk definition from "block"
+    block::Array            # chunk definition
+    affinity::Array         # chunk affinity
 end
 
 const no_affinity = []
@@ -16,17 +16,42 @@ const no_affinity = []
 block(b::Blocks) = b.block
 affinity(b::Blocks) = b.affinity
 
-function Blocks(a::Array, outtype::Type, by::Int=0, nsplits::Int=0)
+filter_none(x) = x
+filter_file_io(x::Tuple) = BlockIO(open(x[1]), x[2])
+filter_io_recordio(x::BlockIO, dlm::Char='\n') = BlockIO(x, dlm)
+function filter_io_bufferedio(x::IO) 
+    buff = read(x, Array(Uint8, nb_available(x)))
+    close(x)
+    IOBuffer(buff)
+end
+filter_recordio_lines(x::IO) = readlines(x)
+
+|>(b::Blocks, f::Function) = filter(f, b)
+function filter(f::Function, b::Blocks)
+    let oldf = b.filter
+        b.filter = (x)->f(oldf(x))
+        return b
+    end
+end
+
+function filter(flist::Vector{Function}, b::Blocks)
+    for f in flist
+        filter(f, b)
+    end
+    b
+end
+
+function Blocks(a::Array, filter::Function=filter_none, by::Int=0, nsplits::Int=0)
     asz = size(a)
     (by == 0) && (by = length(asz))
     (nsplits == 0) && (nsplits = nworkers())
     sz = map(x->1:x, [asz...])
     splits = map((x)->begin sz[by]=x; tuple(sz...); end, Base.splitrange(length(sz[by]), nsplits))
     blocks = [slice(a,x) for x in splits]
-    Blocks(a, outtype, blocks, no_affinity)
+    Blocks(a, filter, blocks, no_affinity)
 end
 
-function Blocks(A::Array, outtype::Type, dims::Array)
+function Blocks(A::Array, filter::Function=filter_none, dims::Array=[])
     isempty(dims) && error("no dimensions specified")
     dimsA = [size(A)...]
     ndimsA = ndims(A)
@@ -52,17 +77,18 @@ function Blocks(A::Array, outtype::Type, dims::Array)
             blkid += 1
         end
     end
-    Blocks(A, outtype, blocks, no_affinity)    
+    Blocks(A, filter, blocks, no_affinity)
 end
 
-function Blocks(f::File, outtype::Type, nsplits::Int=0)
+function Blocks(f::File, filter::Function=filter_none, nsplits::Int=0)
     sz = filesize(f.path)
     (sz == 0) && error("missing or empty file: $(f.path)")
     (nsplits == 0) && (nsplits = nworkers())
     splits = Base.splitrange(sz, nsplits)
     data = [(f.path, x) for x in splits]
-    Blocks(f, outtype, data, no_affinity)
+    Blocks(f, filter, data, no_affinity)
 end
+
 
 # BlockStream can chunk content that is:
 #   - streaming

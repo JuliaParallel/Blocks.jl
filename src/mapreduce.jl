@@ -1,10 +1,18 @@
-function pmap_base{T<:Any,D<:Any}(m, bf::Blocks{T,D}...)
+
+function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
+    np = length(b)
+    filtered = [(filters[idx])(b[idx]) for idx in 1:np]
+    m(filtered...)
+end
+
+function pmap{T<:Any}(m, bf::Blocks{T}...)
     affinities = [x.affinity for x in bf]
     blks = [x.block for x in bf]
-    # without any affinities, fall back to default pmap
-    (sum([((x == no_affinity) ? 0 : 1) for x in affinities]) == 0) && (return pmap(m, blks...))
+    filters = [x.filter for x in bf]
+    fc = (b...)->filtered_fn_call(m, filters, b...)
 
-    #(length(bf) > 1) && error("pmap across multiple block lists with affinities not supported (TBD)")
+    # without any affinities, fall back to default pmap
+    (sum([((x == no_affinity) ? 0 : 1) for x in affinities]) == 0) && (return pmap(fc, blks...))
 
     n1 = length(affinities[1])
     n = length(affinities)
@@ -45,7 +53,7 @@ function pmap_base{T<:Any,D<:Any}(m, bf::Blocks{T,D}...)
                     while true
                         idx = nextidx(wpid)
                         (idx == 0) && break
-                        results[idx] = remotecall_fetch(wpid, m, map(b->b[idx], blks)...) 
+                        results[idx] = remotecall_fetch(wpid, fc, map(b->b[idx], blks)...) 
                     end
                 end
             end
@@ -54,18 +62,18 @@ function pmap_base{T<:Any,D<:Any}(m, bf::Blocks{T,D}...)
     results
 end
 
-function _mf_file_io(m::Function, x::Tuple)
-    bio = BlockIO(open(x[1]), x[2])
-    m(bio)
-end
-function _mf_file_lines(m::Function, x::Tuple)
-    bio = BlockIO(open(x[1]), x[2], '\n')
-    m(readlines(bio))
-end 
-        
-pmap{T<:File,D<:Vector{String}}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_lines(m,x), bf...)
-pmap{T<:File,D<:IO}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_io(m,x), bf...)
-pmap{T<:Array,D<:Array}(m, bf::Blocks{T,D}...) = pmap_base(m, bf...)
+#function _mf_file_io(m::Function, x::Tuple)
+#    bio = BlockIO(open(x[1]), x[2])
+#    m(bio)
+#end
+#function _mf_file_lines(m::Function, x::Tuple)
+#    bio = BlockIO(open(x[1]), x[2], '\n')
+#    m(readlines(bio))
+#end 
+ 
+#pmap{T<:File,D<:Vector{String}}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_lines(m,x), bf...)
+#pmap{T<:File,D<:IO}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_io(m,x), bf...)
+#pmap{T<:Array,D<:Array}(m, bf::Blocks{T,D}...) = pmap_base(m, bf...)
 
 
 pmapreduce(m, r, bf::Blocks...) = reduce(r, pmap(m, bf...))

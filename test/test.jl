@@ -6,29 +6,22 @@ function testfn(f::Function, s::String)
     ret = f()
     println("\t\tresult: $(ret)")
 
-    tic();
-    for i in 1:nloops
-        f();
-    end
-    t = toc();
+    t = @elapsed for i in 1:nloops f(); end
     println("\t\ttime: $(t/nloops)")
 end
 
-f_df() = pmap(x->nrow(x), Blocks(File(datafile), DataFrame, 4))
-a_a1() = pmap(x->sum(2*x), Blocks([1:10000000], Array, 1, 10))
-a_a2() = pmap(x->sum(2*x), Blocks(reshape([1:1000],10,10,10), Array, [1,2]))
-f_ios() = pmap(x->length(split(readall(x))), Blocks(File(datafile), IO, 2))
+f_df() = pmapreduce(x->nrow(x), +, Blocks(File(datafile)) |> filter_file_io |> filter_io_recordio |> (x)->filter_recordio_dataframe(x; header=false))
+a_a1() = pmapreduce(x->sum(2*x), +, Blocks([1:10000000], filter_none, 1, nworkers()))
+a_a2() = pmapreduce(x->sum(2*x), +, Blocks(reshape([1:1000],10,10,10), filter_none, [1,2]))
+f_ios() = pmapreduce(x->length(x), +, Blocks(File(datafile)) |> filter_file_io |> filter_io_recordio |> filter_recordio_lines)
 
-function procaffmap()
-    b = Blocks(File(datafile), IO, 10)
-    b.affinity = {[2], [3], [3,4], [2,3,4], [4], [2,4], [2,4], [4], [3,4], [3,4]}
-    pmap(x->length(split(readall(x))), b)
-end
-
-function procaffmapred()
-    b = Blocks(File(datafile), IO, 10)
-    b.affinity = {[2], [3], [3,4], [2,3,4], [4], [2,4], [2,4], [4], [3,4], [3,4]}
-    pmapreduce(x->length(split(readall(x))), +, b)
+function procaff()
+    b = Blocks(File(datafile)) |> filter_file_io |> filter_io_recordio |> filter_recordio_lines
+    # create random affinities
+    wrkrids = workers()
+    nw = length(wrkrids)
+    b.affinity = map(x->randsample(wrkrids, min(3,nw)), 1:nw)
+    pmapreduce(x->length(x), +, b)
 end
 
 function load_pkgs()
@@ -39,14 +32,12 @@ function load_pkgs()
 end
 
 function do_all_tests()
+    println("running tests...")
     testfn(f_df, "file->dataframe")
     testfn(a_a1, "array->array")
     testfn(a_a2, "array->array")
     testfn(f_ios, "file->iostream")
-    if nprocs() == 4
-        testfn(procaffmap, "map processor affinity")
-        testfn(procaffmapred, "mapreduce processor affinity")
-    end
+    testfn(procaff, "map processor affinity")
 end
 
 load_pkgs()
@@ -58,7 +49,3 @@ println("\tnprocs: $(nprocs())")
 load_pkgs()
 do_all_tests()
 
-
-
-#pmap(x->length(split(readall(x))), ["test.csv", "test.csv", "test.csv", "test.csv"])
-#pmap(x->sum(2*x), [1:1000])

@@ -41,8 +41,8 @@ function sort_step_2(workfile::String, block_files::Array, nway::Int=0)
     npairs = int(ceil(length(block_files)/nway))
     mb = cell(npairs)
     for idx in 1:npairs
-        st = (idx-1)*2+1
-        ed = min(length(block_files), st+1)
+        st = (idx-1)*nway+1
+        ed = min(length(block_files), st+nway-1)
         mb[idx] = block_files[st:ed]
     end
     block_files = pmap(x->merge_blocks(workfile, x), mb) 
@@ -54,7 +54,7 @@ function sort_step_2(workfile::String, block_files::Array, nway::Int=0)
 end
 
 function sort_step_1(workfile::String, n::Int)
-    b = Blocks(File(workfile), Vector{String}, n)
+    b = Blocks(File(workfile), filter_none, n) |> filter_file_io |> filter_io_recordio |> filter_recordio_lines
     block_files = pmap(c->begin 
         fname = tmpf(workfile)
         io = open(fname, "w")
