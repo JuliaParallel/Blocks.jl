@@ -16,15 +16,15 @@ const no_affinity = []
 block(b::Blocks) = b.block
 affinity(b::Blocks) = b.affinity
 
-filter_none(x) = x
-filter_file_io(x::Tuple) = BlockIO(open(x[1]), x[2])
-filter_io_recordio(x::BlockIO, dlm::Char='\n') = BlockIO(x, dlm)
-function filter_io_bufferedio(x::IO) 
+as_it_is(x) = x
+as_io(x::Tuple) = BlockIO(open(x[1]), x[2])
+as_recordio(x::BlockIO, dlm::Char='\n') = BlockIO(x, dlm)
+function as_bufferedio(x::IO) 
     buff = read(x, Array(Uint8, nb_available(x)))
     close(x)
     IOBuffer(buff)
 end
-filter_recordio_lines(x::IO) = readlines(x)
+as_lines(x::IO) = readlines(x)
 
 |>(b::Blocks, f::Function) = filter(f, b)
 function filter(f::Function, b::Blocks)
@@ -41,7 +41,7 @@ function filter(flist::Vector{Function}, b::Blocks)
     b
 end
 
-function Blocks(a::Array, filter::Function=filter_none, by::Int=0, nsplits::Int=0)
+function Blocks(a::Array, filter::Function=as_it_is, by::Int=0, nsplits::Int=0)
     asz = size(a)
     (by == 0) && (by = length(asz))
     (nsplits == 0) && (nsplits = nworkers())
@@ -51,7 +51,7 @@ function Blocks(a::Array, filter::Function=filter_none, by::Int=0, nsplits::Int=
     Blocks(a, filter, blocks, no_affinity)
 end
 
-function Blocks(A::Array, filter::Function=filter_none, dims::Array=[])
+function Blocks(A::Array, filter::Function=as_it_is, dims::Array=[])
     isempty(dims) && error("no dimensions specified")
     dimsA = [size(A)...]
     ndimsA = ndims(A)
@@ -80,7 +80,7 @@ function Blocks(A::Array, filter::Function=filter_none, dims::Array=[])
     Blocks(A, filter, blocks, no_affinity)
 end
 
-function Blocks(f::File, filter::Function=filter_none, nsplits::Int=0)
+function Blocks(f::File, filter::Function=as_it_is, nsplits::Int=0)
     sz = filesize(f.path)
     (sz == 0) && error("missing or empty file: $(f.path)")
     (nsplits == 0) && (nsplits = nworkers())

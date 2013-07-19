@@ -10,13 +10,13 @@ function testfn(f::Function, s::String)
     println("\t\ttime: $(t/nloops)")
 end
 
-f_df() = pmapreduce(x->nrow(x), +, Blocks(File(datafile)) |> filter_file_io |> filter_io_recordio |> (x)->filter_recordio_dataframe(x; header=false))
-a_a1() = pmapreduce(x->sum(2*x), +, Blocks([1:10000000], filter_none, 1, nworkers()))
-a_a2() = pmapreduce(x->sum(2*x), +, Blocks(reshape([1:1000],10,10,10), filter_none, [1,2]))
-f_ios() = pmapreduce(x->length(x), +, Blocks(File(datafile)) |> filter_file_io |> filter_io_recordio |> filter_recordio_lines)
+f_df() = pmapreduce(x->nrow(x), +, Blocks(File(datafile)) |> as_io |> as_recordio |> (x)->as_dataframe(x; header=false))
+a_a1() = pmapreduce(x->sum(2*x), +, Blocks([1:10000000], as_it_is, 1, nworkers()))
+a_a2() = pmapreduce(x->sum(2*x), +, Blocks(reshape([1:1000],10,10,10), as_it_is, [1,2]))
+f_ios() = pmapreduce(x->length(x), +, Blocks(File(datafile)) |> as_io |> as_recordio |> as_lines)
 
 function procaff()
-    b = Blocks(File(datafile)) |> filter_file_io |> filter_io_recordio |> filter_recordio_lines
+    b = Blocks(File(datafile)) |> as_io |> as_recordio |> as_lines
     # create random affinities
     wrkrids = workers()
     nw = length(wrkrids)

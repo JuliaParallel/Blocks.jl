@@ -10,20 +10,19 @@ importall   DataFrames
 
 export      Blocks,
             block, affinity, filter, |>,
-            filter_none, filter_file_io, filter_io_recordio, filter_recordio_lines, filter_io_bufferedio,
+            as_it_is, as_io, as_recordio, as_lines, as_bufferedio,
 
             pmap, pmapreduce,
 
-            DDataFrame, filter_recordio_dataframe, dreadtable, dwritetable, writetable,
+            DDataFrame, as_dataframe, dreadtable, dwritetable, writetable,
             colmins, colmaxs, colprods, colsums, colmeans, 
             all, any, isequal,
             nrow, ncol, colnames, colnames!, clean_colnames!, rename, rename!, index, 
             head, tail, vcat, hcat, rbind, cbind, copy, deepcopy, isfinite, isnan, isna,
             without, delete!, deleterows!, with, within!, complete_cases, complete_cases!, 
             gather, 
-            merge, colwise, by,
+            merge, colwise, by
 
-            filter_hdfsfile_io
 # TODO:
 # duplicated, drop_duplicates!
 include("blocks.jl")

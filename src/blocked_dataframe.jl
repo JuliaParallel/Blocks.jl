@@ -29,21 +29,16 @@ function _dims(dt::DDataFrame, rows::Bool=true, cols::Bool=true)
     dt
 end
 
-function filter_recordio_dataframe(bio::IO; kwargs...)
+function as_dataframe(bio::IO; kwargs...)
     println("reading dataframe...")
-    #hdr = (:header,true)
-    #kwargs = [kwargs...]
-    #for (idx,kw) in enumerate(kwargs)
-    #    (kw[1]==:header) && (hdr=splice!(kwargs, idx); break)
-    #end
-    #push!(kwargs, hdr[2] ? (:header,(1==x.r.start)) : hdr)
-    
-    println("buffering into iob...")
-    iob = IOBuffer(read(bio, Array(Uint8, filesize(bio))))
-    println("reading from iob...")
-    tbl = readtable(iob; kwargs...)
-    println("read from iob")
-    close(iob)
+    kwargs = _check_readtable_kwargs(kwargs...)
+    #println("buffering into iob...")
+    #iob = IOBuffer(read(bio, Array(Uint8, filesize(bio))))
+    #println("reading from iob...")
+    #tbl = readtable(iob; kwargs...)
+    tbl = readtable(bio; kwargs...)
+    println("read dataframe")
+    #close(iob)
     tbl
 end
 
@@ -53,15 +48,32 @@ function _ref(x)
     r
 end
 
-_blk(dt::DDataFrame) = Blocks(dt, filter_none, dt.rrefs, dt.procs)
+_blk(dt::DDataFrame) = Blocks(dt, as_it_is, dt.rrefs, dt.procs)
+
+function _check_readtable_kwargs(kwargs...)
+    kwargs = {kwargs...}
+    for kw in kwargs
+        contains([:skipstart, :skiprows], kw[1]) && error("dreadtable does not support $(kw[1])")
+    end
+    for (idx,kw) in enumerate(kwargs)
+        if (kw[1]==:header) 
+            (kw[2] != false) && error("dreadtable does not support reading of headers")
+            splice!(kwargs, idx)
+            break
+        end
+    end
+    push!(kwargs, (:header,false))
+    kwargs
+end
 
 function dreadtable(b::Blocks; kwargs...)
-    fblocks = b |> (x)->filter_recordio_dataframe(x; kwargs...)
+    kwargs = _check_readtable_kwargs(kwargs...)
+    fblocks = b |> (x)->as_dataframe(x; kwargs...)
     fblocks.affinity = workers()
     rrefs = pmap(x->_ref(x), fblocks)
     DDataFrame(rrefs, fblocks.affinity)
 end
-dreadtable(fname::String; kwargs...) = dreadtable(Blocks(File(fname)) |> filter_file_io |> filter_io_recordio; kwargs...)
+dreadtable(fname::String; kwargs...) = dreadtable(Blocks(File(fname)) |> as_io |> as_recordio; kwargs...)
 
 
 
