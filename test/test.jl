@@ -11,8 +11,8 @@ function testfn(f::Function, s::String)
 end
 
 f_df() = pmapreduce(x->nrow(x), +, Blocks(File(datafile)) |> as_io |> as_recordio |> (x)->as_dataframe(x; header=false))
-a_a1() = pmapreduce(x->sum(2*x), +, Blocks([1:10000000], as_it_is, 1, nworkers()))
-a_a2() = pmapreduce(x->sum(2*x), +, Blocks(reshape([1:1000],10,10,10), as_it_is, [1,2]))
+a_a1() = pmapreduce(x->sum(2*x), +, Blocks([1:10000000], 1, nworkers()))
+a_a2() = pmapreduce(x->sum(2*x), +, Blocks(reshape([1:1000],10,10,10), [1,2]))
 f_ios() = pmapreduce(x->length(x), +, Blocks(File(datafile)) |> as_io |> as_recordio |> as_lines)
 
 function procaff()

@@ -1,5 +1,5 @@
 
-function Blocks(f::HdfsURL, filter::Function=as_it_is)
+function Blocks(f::HdfsURL)
     worker_ids = workers()
     worker_ips = map(x->getaddrinfo(isa(x, LocalProcess)?getipaddr():x.host), map(x->Base.worker_from_id(x), worker_ids))
 
@@ -10,6 +10,6 @@ function Blocks(f::HdfsURL, filter::Function=as_it_is)
     file_sz = filestat.size
 
     data = [(f, ((x-1)*block_sz+1):(min(file_sz,x*block_sz))) for x in 1:length(block_dist)]
-    Blocks(f, filter, data, block_wrkr_ids)
+    Blocks(f, data, block_wrkr_ids, as_it_is)
 end
 

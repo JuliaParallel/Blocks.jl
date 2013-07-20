@@ -6,9 +6,9 @@ abstract AbstractBlocks{T,D}
 #   - distributed across processors
 type Blocks{T} <: AbstractBlocks{T}
     source::T
-    filter::Function        # returns a processed block. can be chained. default just passes the chunk definition from "block"
     block::Array            # chunk definition
     affinity::Array         # chunk affinity
+    filter::Function        # returns a processed block. can be chained. default just passes the chunk definition from "block"
 end
 
 const no_affinity = []
@@ -41,17 +41,17 @@ function filter(flist::Vector{Function}, b::Blocks)
     b
 end
 
-function Blocks(a::Array, filter::Function=as_it_is, by::Int=0, nsplits::Int=0)
+function Blocks(a::Array, by::Int=0, nsplits::Int=0)
     asz = size(a)
     (by == 0) && (by = length(asz))
     (nsplits == 0) && (nsplits = nworkers())
     sz = map(x->1:x, [asz...])
     splits = map((x)->begin sz[by]=x; tuple(sz...); end, Base.splitrange(length(sz[by]), nsplits))
     blocks = [slice(a,x) for x in splits]
-    Blocks(a, filter, blocks, no_affinity)
+    Blocks(a, blocks, no_affinity, as_it_is)
 end
 
-function Blocks(A::Array, filter::Function=as_it_is, dims::Array=[])
+function Blocks(A::Array, dims::Array=[])
     isempty(dims) && error("no dimensions specified")
     dimsA = [size(A)...]
     ndimsA = ndims(A)
@@ -77,16 +77,16 @@ function Blocks(A::Array, filter::Function=as_it_is, dims::Array=[])
             blkid += 1
         end
     end
-    Blocks(A, filter, blocks, no_affinity)
+    Blocks(A, blocks, no_affinity, as_it_is)
 end
 
-function Blocks(f::File, filter::Function=as_it_is, nsplits::Int=0)
+function Blocks(f::File, nsplits::Int=0)
     sz = filesize(f.path)
     (sz == 0) && error("missing or empty file: $(f.path)")
     (nsplits == 0) && (nsplits = nworkers())
     splits = Base.splitrange(sz, nsplits)
     data = [(f.path, x) for x in splits]
-    Blocks(f, filter, data, no_affinity)
+    Blocks(f, data, no_affinity, as_it_is)
 end
 
 

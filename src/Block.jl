@@ -12,7 +12,7 @@ export      Blocks,
             block, affinity, filter, |>,
             as_it_is, as_io, as_recordio, as_lines, as_bufferedio,
 
-            pmap, pmapreduce,
+            map, mapreduce, pmap, pmapreduce,
 
             DDataFrame, as_dataframe, dreadtable, dwritetable, writetable,
             colmins, colmaxs, colprods, colsums, colmeans, 

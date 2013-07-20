@@ -5,6 +5,13 @@ function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
     m(filtered...)
 end
 
+function map{T<:Any}(m, bf::Blocks{T}...)
+    blks = [x.block for x in bf]
+    filters = [x.filter for x in bf]
+    fc = (b...)->filtered_fn_call(m, filters, b...)
+    map(fc, blks...)
+end
+
 function pmap{T<:Any}(m, bf::Blocks{T}...)
     affinities = [x.affinity for x in bf]
     blks = [x.block for x in bf]
@@ -78,4 +85,7 @@ end
 
 pmapreduce(m, r, bf::Blocks...) = reduce(r, pmap(m, bf...))
 pmapreduce(m, r, v0, bf::Blocks...) = reduce(r, v0, pmap(m, bf...))
+
+mapreduce(m::Union(DataType,Function), r::Function, bf::Blocks...) = reduce(r, map(m, bf...))
+mapreduce(m::Union(DataType,Function), r::Function, v0, bf::Blocks...) = reduce(r, v0, map(m, bf...))
 
