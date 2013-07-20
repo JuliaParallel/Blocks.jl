@@ -1,5 +1,5 @@
-Blocks.jl
-=========
+Blocks
+======
 A framework to:
 - represent chunks of entities
 - represent processor affinities of the chunks
@@ -11,37 +11,38 @@ As examples of its utility, it has been used to implement chunked and distribute
 ### Creating Blocks
 #### Disk Files
 ````
-    Blocks(file::File, nblocks::Int=0)
-        Where nblocks is the number of chunks to divide the file into (defaults to number of worker processes).
-        Each chunk is represented as the file and the byte range.
-        Assumes that the file is available at all processors and chunks can be processed anywhere.
+Blocks(file::File, nblocks::Int=0)
+    Where nblocks is the number of chunks to divide the file into.
+    Number of chunks (nblocks) defaults to number of worker processes.
+    Each chunk is represented as the file and the byte range.
+    Assumes that the file is available at all processors and chunks can be processed anywhere.
 ````
 
 #### HDFS Files
 ````
-    Blocks(file::HdfsURL)
-        Each chunk is a block in HDFS.
-        Processor affinity of each chunk is set to machines where this block has been replicated by HDFS.
+Blocks(file::HdfsURL)
+    Each chunk is a block in HDFS.
+    Processor affinity of each chunk is set to machines where this block has been replicated by HDFS.
 ````
 
 #### Arrays:
 ````
-    Blocks(A::Array, dims::Array)
-        Chunks created across dimensions specified in dims.
-        Chunks are not pre-distributed and any chunk can be processed at any processor.
+Blocks(A::Array, dims::Array)
+    Chunks created across dimensions specified in dims.
+    Chunks are not pre-distributed and any chunk can be processed at any processor.
 
-    Blocks(A::Array, dim::Int, nblocks::Int)
-        Chunked to nblocks chunks on dimension dim.
-        Chunks are not pre-distributed and any chunk can be processed at any processor.
+Blocks(A::Array, dim::Int, nblocks::Int)
+    Chunked to nblocks chunks on dimension dim.
+    Chunks are not pre-distributed and any chunk can be processed at any processor.
 ````
 
 #### Distributed DataFrames:
 Blocks introduces a distributed `DataFrame` type named `DDataFrame`. It holds referenced to multiple remote data frames, on multiple processors. A large table can be read in parallel into a DDataFrame by using the special `dreadtable` method. 
 
 ````
-    dreadtable(filename::String; kwargs...)
-    dreadtable(blocks::Blocks; kwargs...)
-        Where blocks are created from disk or HDFS files as described in sections above.
+dreadtable(filename::String; kwargs...)
+dreadtable(blocks::Blocks; kwargs...)
+    Where blocks are created from disk or HDFS files as described in sections above.
 ````
 
 A `DDataFrame` is easily represented as Blocks. `DDataFrame` has been used with `Blocks` to implement most `DataFrame` operations in a distributed manner. Most methods defined on a DataFrame also work on DDataFrames in a distributed manner using `pmap` and `reduce` to operate on chunks parallely.
@@ -65,14 +66,14 @@ julia> colsums(dt)
              x1      x2      x3      x4      x5      x6     x7      x8      x9     x10
 [1,]    46.1597 41.9286 51.4197 50.1906 48.2623 44.5622 50.914 50.7266 44.1346 51.1001
 
-julia> all(dt+dt .== 2\*dt)
+julia> all(dt+dt .== 2*dt)
 true
 ````
 
 ### Composing Actions on Blocks
 Functions can be chained and then applied on to chunks in a block with a `pmap` or `pmapreduce`. The Julia notation `|>` is used to indicate chaining. For example to read a block of DataFrame from a chunk of a disk file:
 ````
-b = Blocks(File(filename) |> as\_io |> as\_recordio |> as\_dataframe
+b = Blocks(File(filename) |> as_io |> as_recordio |> as_dataframe
 ````
 Each function in the chain works on the output of the previous function.
 
