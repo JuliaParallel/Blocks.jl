@@ -8,9 +8,9 @@ using HDFS.MapReduce
 importall   Base
 importall   DataFrames
 
-export      Blocks,
-            block, affinity, filter, |>,
-            as_it_is, as_io, as_recordio, as_lines, as_bufferedio,
+export      Blocks, |>,
+            blocks, affinities,
+            as_it_is, as_io, as_recordio, as_lines, as_bufferedio, as_bytearray,
 
             map, mapreduce, pmap, pmapreduce,
 
@@ -25,6 +25,7 @@ export      Blocks,
 
 # TODO:
 # duplicated, drop_duplicates!
+include("pmap.jl")
 include("blocks.jl")
 include("mapreduce.jl")
 include("blocked_dataframe.jl")

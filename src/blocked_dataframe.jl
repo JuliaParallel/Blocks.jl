@@ -29,24 +29,13 @@ function _dims(dt::DDataFrame, rows::Bool=true, cols::Bool=true)
     dt
 end
 
-function as_dataframe(bio::IO; kwargs...)
-    #println("reading dataframe...")
+function as_dataframe(bio::BlockableIO; kwargs...)
     kwargs = _check_readtable_kwargs(kwargs...)
-    #println("buffering into iob...")
-    #iob = IOBuffer(read(bio, Array(Uint8, filesize(bio))))
-    #println("reading from iob...")
-    #tbl = readtable(iob; kwargs...)
     tbl = readtable(bio; kwargs...)
-    #println("read dataframe")
-    #close(iob)
     tbl
 end
 
-function _ref(x)
-    r = RemoteRef()
-    put(r,x)
-    r
-end
+as_dataframe(A::Array) = DataFrame(A)
 
 Blocks(dt::DDataFrame) = Blocks(dt, dt.rrefs, dt.procs, as_it_is)
 
@@ -68,13 +57,28 @@ end
 
 function dreadtable(b::Blocks; kwargs...)
     kwargs = _check_readtable_kwargs(kwargs...)
-    fblocks = b |> (x)->as_dataframe(x; kwargs...)
-    fblocks.affinity = workers()
-    rrefs = pmap(x->_ref(x), fblocks)
-    DDataFrame(rrefs, fblocks.affinity)
+    b.affinity = workers()
+    rrefs = pmap(x->as_dataframe(x;kwargs...), b; fetch_results=false)
+    DDataFrame(rrefs, b.affinity)
 end
 dreadtable(fname::String; kwargs...) = dreadtable(Blocks(File(fname)) |> as_io |> as_recordio; kwargs...)
+function dreadtable(io::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks::Bool=true; kwargs...)
+    b = Blocks(io, chunk_sz, '\n') |> as_recordio |> as_bytearray
+    rrefs = pmap(x->as_dataframe(PipeBuffer(x); kwargs...), b; fetch_results=false)
+    procs = map(x->x.where, rrefs)
 
+    if merge_chunks
+        uniqprocs = unique(procs)
+        collected_refs = map(proc->rrefs[find(x->(x==proc), procs)], uniqprocs)
+        merging_block = Blocks(collected_refs, collected_refs, uniqprocs, as_it_is)
+
+        vcat_refs = pmap(reflist->vcat([fetch(x) for x in reflist]...), merging_block; fetch_results=false)
+        rrefs = vcat_refs
+        procs = uniqprocs
+    end
+    
+    DDataFrame(rrefs, procs)
+end
 
 
 # Operations on Distributed DataFrames
@@ -83,7 +87,7 @@ dreadtable(fname::String; kwargs...) = dreadtable(Blocks(File(fname)) |> as_io |
 for f in [DataFrames.elementary_functions, DataFrames.unary_operators, :copy, :deepcopy, :isfinite, :isnan]
     @eval begin
         function ($f)(dt::DDataFrame)
-            rrefs = pmap(x->_ref(($f)(fetch(x))), Blocks(dt))
+            rrefs = pmap(x->($f)(fetch(x)), Blocks(dt); fetch_results=false)
             DDataFrame(rrefs, dt.procs)
         end
     end
@@ -92,7 +96,7 @@ end
 for f in [:without]
     @eval begin
         function ($f)(dt::DDataFrame, p1)
-            rrefs = pmap(x->_ref(($f)(fetch(x), p1)), Blocks(dt))
+            rrefs = pmap(x->($f)(fetch(x), p1), Blocks(dt); fetch_results=false)
             DDataFrame(rrefs, dt.procs)
         end
     end
@@ -113,7 +117,7 @@ function deleterows!(dt::DDataFrame, keep_inds::Vector{Int})
     for idx in 1:length(dt.nrows)
         end_row = dt.nrows[idx]
         part_rows = filter(x->(beg_row <= x <= (beg_row+end_row-1)), keep_inds) .- (beg_row-1)
-        push!(split_inds, remotecall_fetch(dt.procs[idx], x->_ref(DataFrame(x)), part_rows))
+        push!(split_inds, remotecall_wait(dt.procs[idx], DataFrame, part_rows))
         beg_row = end_row+1
     end
     dt_keep_inds = DDataFrame(split_inds, dt.procs)
@@ -144,11 +148,11 @@ end
 for f in DataFrames.binary_operators
     @eval begin
         function ($f)(dt::DDataFrame, x::Union(Number, NAtype))
-            rrefs = pmap(y->_ref(($f)(fetch(y),x)), Blocks(dt))
+            rrefs = pmap(y->($f)(fetch(y),x), Blocks(dt); fetch_results=false)
             DDataFrame(rrefs, dt.procs)
         end
         function ($f)(x::Union(Number, NAtype), dt::DDataFrame)
-            rrefs = pmap(y->_ref(($f)(x,fetch(y))), Blocks(dt))
+            rrefs = pmap(y->($f)(x,fetch(y)), Blocks(dt); fetch_results=false)
             DDataFrame(rrefs, dt.procs)
         end
     end
@@ -158,18 +162,18 @@ for (f,_) in DataFrames.vectorized_comparison_operators
     for t in [:Number, :String, :NAtype]
         @eval begin
             function ($f){T <: ($t)}(dt::DDataFrame, x::T)
-                rrefs = pmap(y->_ref(($f)(fetch(y),x)), Blocks(dt))
+                rrefs = pmap(y->($f)(fetch(y),x), Blocks(dt); fetch_results=false)
                 DDataFrame(rrefs, dt.procs)
             end
             function ($f){T <: ($t)}(x::T, dt::DDataFrame)
-                rrefs = pmap(y->_ref(($f)(x,fetch(y))), Blocks(dt))
+                rrefs = pmap(y->($f)(x,fetch(y)), Blocks(dt); fetch_results=false)
                 DDataFrame(rrefs, dt.procs)
             end
         end
     end
     @eval begin
         function ($f)(a::DDataFrame, b::DDataFrame)
-            rrefs = pmap((x,y)->_ref(($f)(fetch(x),fetch(y))), Blocks(a), Blocks(b))
+            rrefs = pmap((x,y)->($f)(fetch(x),fetch(y)), Blocks(a), Blocks(b); fetch_results=false)
             DDataFrame(rrefs, a.procs)
         end
     end
@@ -187,7 +191,7 @@ for f in DataFrames.array_arithmetic_operators
     @eval begin
         function ($f)(a::DDataFrame, b::DDataFrame)
             # TODO: check dimensions
-            rrefs = pmap((x,y)->_ref(($f)(fetch(x),fetch(y))), Blocks(a), Blocks(b))
+            rrefs = pmap((x,y)->($f)(fetch(x),fetch(y)), Blocks(a), Blocks(b); fetch_results=false)
             DDataFrame(rrefs, a.procs)
         end
     end
@@ -223,7 +227,7 @@ end
 for f in [:rename, :rename!]
     @eval begin
         function ($f)(dt::DDataFrame, from, to)
-            pmap(x->_ref(($f)(fetch(x), from, to)), Blocks(dt))
+            pmap(x->($f)(fetch(x), from, to), Blocks(dt); fetch_results=false)
             ($f)(dt.colindex, from, to)
         end
     end
@@ -235,7 +239,7 @@ index(dt::DDataFrame) = dt.colindex
 for f in [:vcat, :hcat, :rbind, :cbind]
     @eval begin
         function ($f)(dt::DDataFrame...)
-            rrefs = pmap((x...)->_ref(($f)([fetch(y) for y in x]...)), [Blocks(a) for a in dt]...)
+            rrefs = pmap((x...)->($f)([fetch(y) for y in x]...), [Blocks(a) for a in dt]...; fetch_results=false)
             procs = dt[1].procs
             DDataFrame(rrefs, procs)   
         end
@@ -245,14 +249,14 @@ end
 function merge(dt::DDataFrame, t::DataFrame, bycol, jointype)
     (jointype != "inner") && error("only inner joins are supported")
     
-    rrefs = pmap((x)->_ref(merge(fetch(x),t)), Blocks(dt))
+    rrefs = pmap((x)->merge(fetch(x),t), Blocks(dt); fetch_results=false)
     DDataFrame(rrefs, dt.procs)
 end
 
 function merge(t::DataFrame, dt::DDataFrame, bycol, jointype)
     (jointype != "inner") && error("only inner joins are supported")
     
-    rrefs = pmap((x)->_ref(merge(t,fetch(x))), Blocks(dt))
+    rrefs = pmap((x)->merge(t,fetch(x)), Blocks(dt); fetch_results=false)
     DDataFrame(rrefs, dt.procs)
 end
 

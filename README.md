@@ -43,6 +43,12 @@ Blocks introduces a distributed `DataFrame` type named `DDataFrame`. It holds re
 dreadtable(filename::String; kwargs...)
 dreadtable(blocks::Blocks; kwargs...)
     Where blocks are created from disk or HDFS files as described in sections above.
+dreadtable(ios::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks::Bool=true; kwargs...)
+    Where 
+        ios is a stream of data
+        chunk_sz is the approximate number of bytes to chunk the data into
+        merge_chunks indicates whether all chunks on a single processor should be merged. 
+        Merging discards positional information.
 ````
 
 A `DDataFrame` is easily represented as Blocks. `DDataFrame` has been used with `Blocks` to implement most `DataFrame` operations in a distributed manner. Most methods defined on a DataFrame also work on DDataFrames in a distributed manner using `pmap` and `reduce` to operate on chunks parallely.
@@ -73,9 +79,17 @@ true
 ### Composing Actions on Blocks
 Functions can be chained and then applied on to chunks in a block with a `pmap` or `pmapreduce`. The Julia notation `|>` is used to indicate chaining. For example to read a block of DataFrame from a chunk of a disk file:
 ````
-b = Blocks(File(filename) |> as_io |> as_recordio |> as_dataframe
+b = Blocks(File(filename)) |> as_io |> as_recordio |> as_dataframe
 ````
 Each function in the chain works on the output of the previous function.
+
+Following is a list of functions provided in the package. User specified functions can be chained in as well:
+- as_io: creates an `IO` instance from streams or files
+- as_recordio: creates an `IO` instance from streams or files where begin and end positions are adjusted to the boundaries of delimited records
+- as_lines: creates an array of lines from `IO`
+- as_bufferedio: creates buffered `IO` from any other `IO`
+- as_bytearray: creates bytearray from any `IO`
+- as_dataframe: creates a dataframe from any `IO`
 
 
 ### Map and Reduces on Blocks
@@ -118,4 +132,13 @@ julia> map(x->sum(x), ba)
 julia> mapreduce(x->sum(x), +, ba)
 5050
 ````
+
+
+### Sample Use Cases
+#### Sorting Disk Files
+TODO
+#### Distributed DataFrame from streaming data
+TODO
+#### Continuous summarization of streaming data using DataFrames
+TODO
 

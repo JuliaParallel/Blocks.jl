@@ -1,4 +1,5 @@
 abstract AbstractBlocks{T,D}
+typealias BlockableIO Union(IOStream,AsyncStream,IOBuffer,BlockIO)
 
 # Blocks can chunk content that is:
 #   - non-streaming
@@ -13,18 +14,57 @@ end
 
 const no_affinity = []
 
-block(b::Blocks) = b.block
-affinity(b::Blocks) = b.affinity
-
+##
+# Pipelined filters
+# TODO: relook at IO integration after IO enhancements in base
 as_it_is(x) = x
-as_io(x::Tuple) = BlockIO(open(x[1]), x[2])
-as_recordio(x::BlockIO, dlm::Char='\n') = BlockIO(x, dlm)
-function as_bufferedio(x::IO) 
+function as_io(x::Tuple) 
+    if isa(x[1], AsyncStream)
+        aio = x[1]
+        maxsize = x[2]
+        start_reading(aio)
+        Base.wait_readnb(aio, maxsize)
+        avlb = min(nb_available(aio.buffer), maxsize)
+        return PipeBuffer(read(aio, Array(Uint8,avlb)))
+    elseif isa(x[1], BlockableIO)
+        io = x[1]
+        # using BlockIO to avoid copy. 
+        # but since BlockIO would skip till the first record delimiter, 
+        # we must present it the last read byte (which must be the last read delimiter)
+        # therefore we pass the last read position as the start position for BlockIO
+        pos = position(io)
+        endpos = pos+x[2]
+        (0 == pos) && (pos = 1)
+        return BlockIO(io, pos:endpos)
+    else
+        return BlockIO(open(x[1]), x[2])
+    end
+end
+function as_bufferedio(x::BlockableIO) 
     buff = read(x, Array(Uint8, nb_available(x)))
     close(x)
     IOBuffer(buff)
 end
-as_lines(x::IO) = readlines(x)
+as_lines(x::BlockableIO) = readlines(x)
+as_bytearray(x::BlockableIO) = read(x, Array(Uint8, nb_available(x)))
+
+as_recordio(x::BlockIO, dlm::Char='\n') = BlockIO(x, dlm)
+function as_recordio(x::Tuple)
+    dlm = (length(x) == 3) ? x[3] : '\n'
+    if isa(x[1], AsyncStream)
+        aio = x[1]
+        minsize = x[2]
+        start_reading(aio)
+        Base.wait_readnb(aio, minsize)
+        tot_avlb = nb_available(aio.buffer)
+        avlb = min(tot_avlb, minsize)
+        pb = PipeBuffer(read(aio, Array(Uint8,avlb)))
+        write(pb, readuntil(aio, dlm))
+        return pb
+    else
+        return BlockIO(as_io(x), dlm)
+    end
+end
 
 |>(b::Blocks, f::Function) = filter(f, b)
 function filter(f::Function, b::Blocks)
@@ -41,6 +81,36 @@ function filter(flist::Vector{Function}, b::Blocks)
     b
 end
 
+##
+# Iterators for blocks and affinities
+abstract BlocksIterator{T}
+type BlocksAffinityIterator{T} <: BlocksIterator{T}
+    b::Blocks{T}
+end
+type BlocksDataIterator{T} <: BlocksIterator{T}
+    b::Blocks{T}
+end
+start{T<:BlocksIterator}(bi::T) = 1
+done{T<:BlocksIterator}(bi::T,status) = (0 == status)
+function next{T<:BlockableIO}(bi::BlocksIterator{T},status)
+    blk = bi.b
+    data = isa(bi, BlocksAffinityIterator) ? blk.affinity : blk.filter(blk.block[1])
+    status = eof(blk.source) ? 0 : (status+1)
+    (data,status)
+end
+function next{T<:Any}(bi::BlocksIterator{T},status)
+    blk = bi.b
+    data = isa(bi, BlocksAffinityIterator) ? (isempty(b.affinity) ? b.affinity : b.affinity[status+1]) : b.filter(b.block[status+1])
+    status = (status >= length(blk.block)) ? 0 : (status+1)
+    (data,status)
+end
+
+blocks(b::Blocks) = BlocksDataIterator(b)
+affinities(b::Blocks) = BlocksAffinityIterator(b)
+
+
+##
+# Blocks implementations for common types
 function Blocks(a::Array, by::Int=0, nsplits::Int=0)
     asz = size(a)
     (by == 0) && (by = length(asz))
@@ -89,70 +159,6 @@ function Blocks(f::File, nsplits::Int=0)
     Blocks(f, data, no_affinity, as_it_is)
 end
 
+Blocks{T<:BlockableIO}(aio::T, maxsize::Int) = Blocks(aio, [(aio,maxsize)], no_affinity, as_it_is)
+Blocks{T<:BlockableIO}(aio::T, approxsize::Int, dlm::Char) = Blocks(aio, [(aio,approxsize,dlm)], no_affinity, as_it_is)
 
-# BlockStream can chunk content that is:
-#   - streaming
-#   - sequential
-#   - (and hence available only on one processor)
-#type BlockStream{T<:IO,D} <: AbstractBlocks{T,D}
-#    source::T
-#    outtype::Type{D}
-#    block_sz::Int
-#    block_delim::Uint8
-#end
-#
-#type BlockStreamIO <: IO
-#    b::BlockStream
-#    block_pos::Int
-#    eof::Bool
-#    block_num::Int
-#end
-#
-#const no_delim = 0xff
-#
-#
-#block(b::BlockStream) = b
-#affinity(b::BlockStream) = no_affinity
-#
-#start(b::BlockStream) = BlockStreamIO(b, 0, false, 1)
-#function done(b::BlockStream, state::BlockStreamIO)
-#    state.eof && (return true)
-#    eof(state.b.source) && (return (state.eof = true))
-#    false
-#end
-#function next(b::BlockStream, state::BlockStreamIO)
-#    state.block_num += 1
-#    state.eof = false
-#    state.block_pos = 0
-#    (state, state)
-#end
-#
-#
-#close(b::BlockStreamIO) = close(b.b.source)
-#function eof(state::BlockStreamIO)
-#    state.eof && (return true)
-#    b = state.b
-#    s = b.source
-#    eof(s) && (return (state.eof = true))
-#
-#    if state.block_pos > b.block_sz
-#        nbyte = 0xff
-#        try nbyte = Base.peek(s) end
-#        (nbyte == 0xff) && (return (state.eof = true))
-#        if nbyte == b.block_delim
-#            read(s)
-#            return (state.eof = true)
-#        end
-#    end
-#    false
-#end
-#
-#function read(b::BlockStreamIO, x::Type{Uint8}) 
-#    ret = read(b.b.source, x)
-#    b.block_pos += 1
-#    ret
-#end
-#
-#position(b::BlockStreamIO) = b.block_pos
-#
-#

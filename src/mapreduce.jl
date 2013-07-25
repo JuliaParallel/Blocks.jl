@@ -1,10 +1,21 @@
-
-function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
+function filtered(filters::Vector{Function}, b...)
     np = length(b)
-    filtered = [(filters[idx])(b[idx]) for idx in 1:np]
-    m(filtered...)
+    [(filters[idx])(b[idx]) for idx in 1:np]
+end
+function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
+    filt = filtered(filters, b...)
+    m(filt...)
 end
 
+function map{T<:BlockableIO}(m, bf::Blocks{T}...)
+    filters = [x.filter for x in bf]
+    blks = [x.block[1] for x in bf]
+    ret = {}
+    while(reduce((iv,v)->iv&(!eof(v.source)), true, bf))
+        push!(ret, filtered_fn_call(m, filters, blks...))
+    end
+    ret
+end
 function map{T<:Any}(m, bf::Blocks{T}...)
     blks = [x.block for x in bf]
     filters = [x.filter for x in bf]
@@ -12,14 +23,15 @@ function map{T<:Any}(m, bf::Blocks{T}...)
     map(fc, blks...)
 end
 
-function pmap{T<:Any}(m, bf::Blocks{T}...)
+pmap{T<:BlockableIO}(m, bf::Blocks{T}...; kwargs...) = block_pmap(m, [blocks(b) for b in bf]...; kwargs...)
+function pmap{T<:Any}(m, bf::Blocks{T}...; kwargs...)
     affinities = [x.affinity for x in bf]
     blks = [x.block for x in bf]
     filters = [x.filter for x in bf]
     fc = (b...)->filtered_fn_call(m, filters, b...)
 
     # without any affinities, fall back to default pmap
-    (sum([((x == no_affinity) ? 0 : 1) for x in affinities]) == 0) && (return pmap(fc, blks...))
+    (sum([((x == no_affinity) ? 0 : 1) for x in affinities]) == 0) && (return block_pmap(fc, blks...; kwargs...))
 
     n1 = length(affinities[1])
     n = length(affinities)
@@ -52,6 +64,10 @@ function pmap{T<:Any}(m, bf::Blocks{T}...)
         0
     end
 
+    fetch_results = true
+    for (n,v) in kwargs
+        (n == :fetch_results) && (fetch_results = v)
+    end
     @sync begin
         for p=1:np
             wpid = Base.PGRP.workers[p].id
@@ -60,7 +76,8 @@ function pmap{T<:Any}(m, bf::Blocks{T}...)
                     while true
                         idx = nextidx(wpid)
                         (idx == 0) && break
-                        results[idx] = remotecall_fetch(wpid, fc, map(b->b[idx], blks)...) 
+                        d = map(b->b[idx], blks)
+                        results[idx] = fetch_results ? remotecall_fetch(wpid, fc, d...) : remotecall_wait(wpid, fc, d...)
                     end
                 end
             end
@@ -68,19 +85,6 @@ function pmap{T<:Any}(m, bf::Blocks{T}...)
     end
     results
 end
-
-#function _mf_file_io(m::Function, x::Tuple)
-#    bio = BlockIO(open(x[1]), x[2])
-#    m(bio)
-#end
-#function _mf_file_lines(m::Function, x::Tuple)
-#    bio = BlockIO(open(x[1]), x[2], '\n')
-#    m(readlines(bio))
-#end 
- 
-#pmap{T<:File,D<:Vector{String}}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_lines(m,x), bf...)
-#pmap{T<:File,D<:IO}(m, bf::Blocks{T,D}...) = pmap_base(x->_mf_file_io(m,x), bf...)
-#pmap{T<:Array,D<:Array}(m, bf::Blocks{T,D}...) = pmap_base(m, bf...)
 
 
 pmapreduce(m, r, bf::Blocks...) = reduce(r, pmap(m, bf...))
