@@ -48,7 +48,7 @@ dreadtable(ios::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks::Bool=t
         ios is a stream of data
         chunk_sz is the approximate number of bytes to chunk the data into
         merge_chunks indicates whether all chunks on a single processor should be merged. 
-        Merging discards positional information.
+        Merging discards positional information but makes the dataframe efficient by having fewer chunks.
 ````
 
 A `DDataFrame` is easily represented as Blocks. `DDataFrame` has been used with `Blocks` to implement most `DataFrame` operations in a distributed manner. Most methods defined on a DataFrame also work on DDataFrames in a distributed manner using `pmap` and `reduce` to operate on chunks parallely.
@@ -84,12 +84,12 @@ b = Blocks(File(filename)) |> as_io |> as_recordio |> as_dataframe
 Each function in the chain works on the output of the previous function.
 
 Following is a list of functions provided in the package. User specified functions can be chained in as well:
-- as_io: creates an `IO` instance from streams or files
-- as_recordio: creates an `IO` instance from streams or files where begin and end positions are adjusted to the boundaries of delimited records
-- as_lines: creates an array of lines from `IO`
-- as_bufferedio: creates buffered `IO` from any other `IO`
-- as_bytearray: creates bytearray from any `IO`
-- as_dataframe: creates a dataframe from any `IO`
+- `as_io`: creates an `IO` instance from streams or files
+- `as_recordio`: creates an `IO` instance from streams or files where begin and end positions are adjusted to the boundaries of delimited records
+- `as_lines`: creates an array of lines from `IO`
+- `as_bufferedio`: creates buffered `IO` from any other `IO`
+- `as_bytearray`: creates bytearray from any `IO`
+- `as_dataframe`: creates a dataframe from any `IO`
 
 
 ### Map and Reduces on Blocks

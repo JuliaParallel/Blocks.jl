@@ -53,15 +53,17 @@ function sort_step_2(workfile::String, block_files::Array, nway::Int=0)
     block_files
 end
 
+function as_tempfile(lines)
+    fname = tmpf(workfile)
+    io = open(fname, "w")
+    write(io, sort(c))
+    close(io)
+    fname
+end
+
 function sort_step_1(workfile::String, n::Int)
-    b = Blocks(File(workfile), n) |> as_io |> as_recordio |> as_lines
-    block_files = pmap(c->begin 
-        fname = tmpf(workfile)
-        io = open(fname, "w")
-        write(io, sort(c))
-        close(io)
-        fname
-        end, b)
+    b = Blocks(File(workfile), n) |> as_io |> as_recordio |> as_lines |> sort |> as_tempfile
+    block_files = pmap(x->x, b)
     println("\tblocks sorted -> $(length(block_files))...")
     #for fname in block_files
     #    println("\t$(fname)")
@@ -77,4 +79,7 @@ function filesort(workfile::String, n::Int)
     block_files[1]
 end
 
+if length(ARGS) > 0
+    prinln(ARGS)
+end
 

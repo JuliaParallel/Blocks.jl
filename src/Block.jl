@@ -21,7 +21,9 @@ export      Blocks, |>,
             head, tail, vcat, hcat, rbind, cbind, copy, deepcopy, isfinite, isnan, isna,
             without, delete!, deleterows!, with, within!, complete_cases, complete_cases!, 
             gather, 
-            merge, colwise, by
+            merge, colwise, by,
+
+            MatOpBlock, op
 
 # TODO:
 # duplicated, drop_duplicates!
@@ -30,5 +32,6 @@ include("blocks.jl")
 include("mapreduce.jl")
 include("blocked_dataframe.jl")
 include("hdfs_blocks.jl")
+include("matop_blocks.jl")
 
 end

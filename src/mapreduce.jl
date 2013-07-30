@@ -7,7 +7,7 @@ function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
     m(filt...)
 end
 
-function map{T<:BlockableIO}(m, bf::Blocks{T}...)
+function map{T<:BlockableIO}(m::Union(DataType,Function), bf::Blocks{T}...)
     filters = [x.filter for x in bf]
     blks = [x.block[1] for x in bf]
     ret = {}
@@ -16,7 +16,7 @@ function map{T<:BlockableIO}(m, bf::Blocks{T}...)
     end
     ret
 end
-function map{T<:Any}(m, bf::Blocks{T}...)
+function map{T<:Any}(m::Union(DataType,Function), bf::Blocks{T}...)
     blks = [x.block for x in bf]
     filters = [x.filter for x in bf]
     fc = (b...)->filtered_fn_call(m, filters, b...)

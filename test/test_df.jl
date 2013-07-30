@@ -22,3 +22,7 @@ mul_result = 2*df
 eq_result = sum_result .== mul_result
 @assert all(eq_result)
 
+df1 = dreadtable(open(datafile), 1000)
+@assert nrow(df1) == nrow(df)
+@assert ncol(df1) == ncol(df)
+@assert isapprox(sum(matrix(colsums(df1))), sum(matrix(colsums(df2))))

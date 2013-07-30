@@ -11,9 +11,10 @@ function testfn(f::Function, s::String)
 end
 
 f_df() = pmapreduce(x->nrow(x), +, Blocks(File(datafile)) |> as_io |> as_recordio |> (x)->as_dataframe(x; header=false))
-a_a1() = pmapreduce(x->sum(2*x), +, Blocks([1:10000000], 1, nworkers()))
+a_a1() = pmapreduce(x->sum(2*x), +, Blocks([1:1000000], 1, nworkers()))
 a_a2() = pmapreduce(x->sum(2*x), +, Blocks(reshape([1:1000],10,10,10), [1,2]))
 f_ios() = pmapreduce(x->length(x), +, Blocks(File(datafile)) |> as_io |> as_recordio |> as_lines)
+f_stream() = pmapreduce(x->length(x), +, Blocks(open(datafile), 1000) |> as_recordio |> as_lines)
 
 function procaff()
     b = Blocks(File(datafile)) |> as_io |> as_recordio |> as_lines
@@ -37,6 +38,7 @@ function do_all_tests()
     testfn(a_a1, "array->array")
     testfn(a_a2, "array->array")
     testfn(f_ios, "file->iostream")
+    testfn(f_stream, "stream->lines")
     testfn(procaff, "map processor affinity")
 end
 

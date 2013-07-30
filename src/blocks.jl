@@ -111,13 +111,15 @@ affinities(b::Blocks) = BlocksAffinityIterator(b)
 
 ##
 # Blocks implementations for common types
+
 function Blocks(a::Array, by::Int=0, nsplits::Int=0)
     asz = size(a)
     (by == 0) && (by = length(asz))
     (nsplits == 0) && (nsplits = nworkers())
-    sz = map(x->1:x, [asz...])
+    sz = [1:x for x in asz]
     splits = map((x)->begin sz[by]=x; tuple(sz...); end, Base.splitrange(length(sz[by]), nsplits))
-    blocks = [slice(a,x) for x in splits]
+    #blocks = [slice(a,x) for x in splits]
+    blocks = [a[x...] for x in splits]
     Blocks(a, blocks, no_affinity, as_it_is)
 end
 
