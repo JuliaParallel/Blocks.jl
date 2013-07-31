@@ -89,7 +89,8 @@ function block_mul(mb::MatOpBlock)
             resranges = (split1[1], split2[2])
             #println("m1$split1 x m2$split2 = res$resranges")
             # TODO: need more tricks to send a block only once to a node
-            push!(blklist, (resranges, m1[split1...], m2[split2...]))
+            #push!(blklist, (resranges, m1[split1...], m2[split2...]))
+            push!(blklist, (resranges, split1, split2))
             # set affinities of all blocks each split of m1 needs to same processor
             push!(afflist, proc)
         end
@@ -102,14 +103,41 @@ end
 # operations
 function *{T<:MatOpBlock}(blk::Blocks{T})
     mb = blk.source
+    blkb = blk.block
     m1 = mb.m1
     m2 = mb.m2
     m1size = size(m1)
     m2size = size(m2)
+
+    # send blocks to be sent to each machine
+    splitrefs = Dict()
+    rr1 = RemoteRef()
+    rr2 = RemoteRef()
+    put(rr1, m1)
+    put(rr2, m2)
+
+    refb = {}
+    for idx in 1:length(blkb)
+        b = blkb[idx]
+        aff = blk.affinity[idx]
+        k = (aff, 1, b[2])
+        if !haskey(splitrefs, k)
+            rng = b[2]
+            splitrefs[k] = remotecall_fetch(aff, ()->fetch(rr1)[rng...])
+        end
+        k = (aff, 2, b[3])
+        if !haskey(splitrefs, k)
+            rng = b[3]
+            splitrefs[k] = remotecall_fetch(aff, ()->fetch(rr2)[rng...])
+        end
+        push!(refb, (b[1], splitrefs[(aff, 1, b[2])], splitrefs[(aff, 2, b[3])]))
+    end
+
+    # make the block refer to remote refs
+    rrefblks = Blocks(blk.source, refb, blk.affinity, blk.filter)
     restype = typeof(m1[1] * m2[1])
     res = zeros(restype, m1size[1], m2size[2])
-
-    pmapreduce((t)->(t[1], t[2]*t[3]), (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
+    pmapreduce((t)->(t[1], fetch(t[2])*fetch(t[3])), (v,t)->begin v[t[1]...] += t[2]; v; end, res, rrefblks)
     #pmapreduce((t)->begin println("on $(myid()) res$(t[1])"); (t[1], t[2]*t[3]); end, (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
     res
 end

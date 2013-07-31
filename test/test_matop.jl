@@ -1,3 +1,6 @@
+const NPROCS = isempty(ARGS) ? 3 : int(ARGS[1])
+
+
 function load_pkgs()
     println("loading packages...")
     @everywhere using Block
@@ -13,7 +16,7 @@ function do_mul()
     a4 = a3'
 
     println("making blocks...")
-    mb = MatOpBlock(a3, a4, :*, 3)
+    mb = MatOpBlock(a3, a4, :*, NPROCS)
     blk = Blocks(mb)
     println("running matrix operation...")
     t1 = @elapsed (result = op(blk))
@@ -29,13 +32,13 @@ end
 
 function do_mul_large()
     println("creating initial data...")
-    a1 = reshape([1:10000], 1, 10000)
-    a2 = reshape([1:6000], 6000, 1)
+    a1 = reshape([[1:5000],[1:5000]], 1, 10000)
+    a2 = reshape([[1:3000],[1:3000]], 6000, 1)
     a3 = a2*a1
     a4 = a3'
 
     println("making blocks...")
-    mb = MatOpBlock(a3, a4, :*, 3)
+    mb = MatOpBlock(a3, a4, :*, NPROCS)
     blk = Blocks(mb)
     println("running matrix operation...")
     t1 = @elapsed (result = op(blk))
@@ -49,11 +52,11 @@ function do_mul_large()
     println("times: local:$t2 parallel:$t1")
 end
 
-println("adding 3 more processors...")
-addprocs(3)
+println("adding $NPROCS more processors...")
+addprocs(NPROCS)
 println("\tnprocs: $(nprocs())")
 load_pkgs()
 
 do_mul()
-do_mul_large()
+#do_mul_large()
 
