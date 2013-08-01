@@ -6,11 +6,18 @@ type MatOpBlock
     oper::Symbol
     splits1::Tuple
     splits2::Tuple
+    r1::RemoteRef
+    r2::RemoteRef
+    splitrefs::Dict
 
     function MatOpBlock(m1::Matrix, m2::Matrix, oper::Symbol, np::Int=0)
         (0 == np) && (np = nprocs())
         (blks, affs) = (oper == :*) ? matop_block_mul(m1, m2, np) : error("operation $oper not supported")
-        new(m1, m2, oper, blks, affs)
+        r1 = RemoteRef()
+        r2 = RemoteRef()
+        put(r1, m1)
+        put(r2, m2)
+        new(m1, m2, oper, blks, affs, r1, r2, Dict())
     end
 end
 
@@ -69,6 +76,23 @@ function matop_block_mul(m1::Matrix, m2::Matrix, np::Int)
     (tuple(splits1...), tuple(splits2...))
 end
 
+as_mat_splits(mb::MatOpBlock, t::Tuple) = (t[1], mb.m1[t[2]...], mb.m2[t[3]...])
+function as_remote_splits(mb::MatOpBlock, t::Tuple)
+    r1 = mb.r1
+    r2 = mb.r2
+    m1range = t[2]
+    m2range = t[3]
+    aff = t[4]
+    src_proc = myid()
+    #println("as remote split processor $aff m1$m1range m2$m2range")
+    k1 = (aff, 1, m1range)
+    !haskey(mb.splitrefs, k1) && (mb.splitrefs[k1] = remotecall_wait(aff, ()->remotecall_fetch(src_proc, ()->fetch(r1)[m1range...])))
+    k2 = (aff, 2, m2range)
+    !haskey(mb.splitrefs, k2) && (mb.splitrefs[k2] = remotecall_wait(aff, ()->remotecall_fetch(src_proc, ()->fetch(r2)[m2range...])))
+    #println("as remote split processor $aff $(mb.splitrefs[k1]) $(mb.splitrefs[k2])")
+    (t[1], mb.splitrefs[k1], mb.splitrefs[k2])
+end
+
 function block_mul(mb::MatOpBlock)
     m1 = mb.m1
     m2 = mb.m2
@@ -89,13 +113,15 @@ function block_mul(mb::MatOpBlock)
             resranges = (split1[1], split2[2])
             #println("m1$split1 x m2$split2 = res$resranges")
             # TODO: need more tricks to send a block only once to a node
-            push!(blklist, (resranges, m1[split1...], m2[split2...]))
+            #push!(blklist, (resranges, m1[split1...], m2[split2...]))
+            push!(blklist, (resranges, split1, split2, proc))
             # set affinities of all blocks each split of m1 needs to same processor
             push!(afflist, proc)
         end
     end
 
-    Blocks(mb, blklist, afflist, as_it_is, as_it_is)
+    #Blocks(mb, blklist, afflist, as_it_is, (t)->as_mat_splits(mb, t))
+    Blocks(mb, blklist, afflist, as_it_is, (t)->as_remote_splits(mb, t))
 end
 
 ##
@@ -109,7 +135,8 @@ function *{T<:MatOpBlock}(blk::Blocks{T})
     restype = typeof(m1[1] * m2[1])
     res = zeros(restype, m1size[1], m2size[2])
 
-    pmapreduce((t)->(t[1], t[2]*t[3]), (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
+    pmapreduce((t)->(t[1], fetch(t[2])*fetch(t[3])), (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
+    #pmapreduce((t)->(t[1], t[2]*t[3]), (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
     #pmapreduce((t)->begin println("on $(myid()) res$(t[1])"); (t[1], t[2]*t[3]); end, (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
     res
 end

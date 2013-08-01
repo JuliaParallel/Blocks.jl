@@ -32,6 +32,7 @@ function pmap{T<:Any}(m, bf::Blocks{T}...; kwargs...)
     (sum([((x == no_affinity) ? 0 : 1) for x in affs]) == 0) && (return block_pmap(fc, [blocks(b) for b in bf]...; kwargs...))
 
     blks = [x.block for x in bf]
+    prepare = [x.prepare for x in bf]
 
     n1 = length(affs[1])
     n = length(affs)
@@ -76,7 +77,9 @@ function pmap{T<:Any}(m, bf::Blocks{T}...; kwargs...)
                     while true
                         idx = nextidx(wpid)
                         (idx == 0) && break
-                        d = map(b->b[idx], blks)
+                        #println("processor $(wpid) got idx $idx ... preparing data...")
+                        d = [(prepare[bid])((blks[bid])[idx]) for bid in 1:length(blks)]
+                        #println("processor $(wpid) preapred idx $idx")
                         results[idx] = fetch_results ? remotecall_fetch(wpid, fc, d...) : remotecall_wait(wpid, fc, d...)
                     end
                 end
