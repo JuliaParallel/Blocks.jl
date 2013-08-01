@@ -12,6 +12,7 @@ type MatOpBlock
 
     function MatOpBlock(m1::Matrix, m2::Matrix, oper::Symbol, np::Int=0)
         (0 == np) && (np = nprocs())
+        np = min(size(m1)..., size(m2)..., np)
         (blks, affs) = (oper == :*) ? matop_block_mul(m1, m2, np) : error("operation $oper not supported")
         r1 = RemoteRef()
         r2 = RemoteRef()
