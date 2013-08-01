@@ -37,7 +37,7 @@ end
 
 as_dataframe(A::Array) = DataFrame(A)
 
-Blocks(dt::DDataFrame) = Blocks(dt, dt.rrefs, dt.procs, as_it_is)
+Blocks(dt::DDataFrame) = Blocks(dt, dt.rrefs, dt.procs, as_it_is, as_it_is)
 
 function _check_readtable_kwargs(kwargs...)
     kwargs = {kwargs...}
@@ -63,14 +63,14 @@ function dreadtable(b::Blocks; kwargs...)
 end
 dreadtable(fname::String; kwargs...) = dreadtable(Blocks(File(fname)) |> as_io |> as_recordio; kwargs...)
 function dreadtable(io::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks::Bool=true; kwargs...)
-    b = Blocks(io, chunk_sz, '\n') |> as_recordio |> as_bytearray
+    b = (Blocks(io, chunk_sz, '\n') .> as_recordio) .> as_bytearray
     rrefs = pmap(x->as_dataframe(PipeBuffer(x); kwargs...), b; fetch_results=false)
     procs = map(x->x.where, rrefs)
 
     if merge_chunks
         uniqprocs = unique(procs)
         collected_refs = map(proc->rrefs[find(x->(x==proc), procs)], uniqprocs)
-        merging_block = Blocks(collected_refs, collected_refs, uniqprocs, as_it_is)
+        merging_block = Blocks(collected_refs, collected_refs, uniqprocs, as_it_is, as_it_is)
 
         vcat_refs = pmap(reflist->vcat([fetch(x) for x in reflist]...), merging_block; fetch_results=false)
         rrefs = vcat_refs

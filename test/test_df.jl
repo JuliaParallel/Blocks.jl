@@ -1,3 +1,5 @@
+using DataFrames
+
 const datafile = "test.csv"
 const nloops = 10
 
@@ -19,10 +21,10 @@ colnames!(df, ["c1","c2","c3","c4","c5","c6","c7","c8","c9","c10"])
 
 sum_result = df+df
 mul_result = 2*df
-eq_result = sum_result .== mul_result
+eq_result = (sum_result .== mul_result)
 @assert all(eq_result)
 
 df1 = dreadtable(open(datafile), 1000)
 @assert nrow(df1) == nrow(df)
 @assert ncol(df1) == ncol(df)
-@assert isapprox(sum(matrix(colsums(df1))), sum(matrix(colsums(df2))))
+@assert isapprox(sum(matrix(colsums(df1))), sum(matrix(colsums(df))))

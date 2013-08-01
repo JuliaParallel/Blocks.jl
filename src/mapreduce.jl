@@ -7,41 +7,41 @@ function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
     m(filt...)
 end
 
-function map{T<:BlockableIO}(m::Union(DataType,Function), bf::Blocks{T}...)
-    filters = [x.filter for x in bf]
-    blks = [x.block[1] for x in bf]
-    ret = {}
-    while(reduce((iv,v)->iv&(!eof(v.source)), true, bf))
-        push!(ret, filtered_fn_call(m, filters, blks...))
-    end
-    ret
-end
+#function map{T<:BlockableIO}(m::Union(DataType,Function), bf::Blocks{T}...)
+#    filters = [x.filter for x in bf]
+#    blks = [x.block[1] for x in bf]
+#    ret = {}
+#    while(reduce((iv,v)->iv&(!eof(v.source)), true, bf))
+#        push!(ret, filtered_fn_call(m, filters, blks...))
+#    end
+#    ret
+#end
 function map{T<:Any}(m::Union(DataType,Function), bf::Blocks{T}...)
-    blks = [x.block for x in bf]
+    blks = [blocks(x) for x in bf]
     filters = [x.filter for x in bf]
     fc = (b...)->filtered_fn_call(m, filters, b...)
     map(fc, blks...)
 end
 
-pmap{T<:BlockableIO}(m, bf::Blocks{T}...; kwargs...) = block_pmap(m, [blocks(b) for b in bf]...; kwargs...)
+#pmap{T<:BlockableIO}(m, bf::Blocks{T}...; kwargs...) = block_pmap(m, [blocks(b) for b in bf]...; kwargs...)
 function pmap{T<:Any}(m, bf::Blocks{T}...; kwargs...)
-    affinities = [x.affinity for x in bf]
-    blks = [x.block for x in bf]
+    affs = [x.affinity for x in bf]
     filters = [x.filter for x in bf]
     fc = (b...)->filtered_fn_call(m, filters, b...)
-
     # without any affinities, fall back to default pmap
-    (sum([((x == no_affinity) ? 0 : 1) for x in affinities]) == 0) && (return block_pmap(fc, blks...; kwargs...))
+    (sum([((x == no_affinity) ? 0 : 1) for x in affs]) == 0) && (return block_pmap(fc, [blocks(b) for b in bf]...; kwargs...))
 
-    n1 = length(affinities[1])
-    n = length(affinities)
+    blks = [x.block for x in bf]
+
+    n1 = length(affs[1])
+    n = length(affs)
 
     # check if all parts are of same number of blocks
     for idx in 2:n
-        (length(affinities[idx]) != n1) && error("all parts must be of the same number of blocks")
+        (length(affs[idx]) != n1) && error("all parts must be of the same number of blocks")
     end
 
-    afflist = [intersect([affinities[x][j] for x in 1:n]...) for j in 1:n1]
+    afflist = [intersect([affs[x][j] for x in 1:n]...) for j in 1:n1]
 
     # check if atleast one common processor for each block
     for idx in 1:n1

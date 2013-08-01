@@ -10,6 +10,6 @@ function Blocks(f::HdfsURL)
     file_sz = filestat.size
 
     data = [(f, ((x-1)*block_sz+1):(min(file_sz,x*block_sz))) for x in 1:length(block_dist)]
-    Blocks(f, data, block_wrkr_ids, as_it_is)
+    Blocks(f, data, block_wrkr_ids, as_it_is, as_it_is)
 end
 

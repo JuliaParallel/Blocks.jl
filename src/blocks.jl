@@ -10,6 +10,7 @@ type Blocks{T} <: AbstractBlocks{T}
     block::Array            # chunk definition
     affinity::Array         # chunk affinity
     filter::Function        # returns a processed block. can be chained. default just passes the chunk definition from "block"
+    prepare::Function
 end
 
 const no_affinity = []
@@ -81,6 +82,21 @@ function filter(flist::Vector{Function}, b::Blocks)
     b
 end
 
+.>(b::Blocks, f::Function) = prepare(f, b)
+function prepare(f::Function, b::Blocks)
+    let oldf = b.prepare
+        b.prepare = (x)->f(oldf(x))
+        return b
+    end
+end
+
+function prepare(flist::Vector{Function}, b::Blocks)
+    for f in flist
+        prepare(f, b)
+    end
+    b
+end
+
 ##
 # Iterators for blocks and affinities
 abstract BlocksIterator{T}
@@ -94,13 +110,13 @@ start{T<:BlocksIterator}(bi::T) = 1
 done{T<:BlocksIterator}(bi::T,status) = (0 == status)
 function next{T<:BlockableIO}(bi::BlocksIterator{T},status)
     blk = bi.b
-    data = isa(bi, BlocksAffinityIterator) ? blk.affinity : blk.filter(blk.block[1])
+    data = isa(bi, BlocksAffinityIterator) ? blk.affinity : blk.prepare(blk.block[1])
     status = eof(blk.source) ? 0 : (status+1)
     (data,status)
 end
 function next{T<:Any}(bi::BlocksIterator{T},status)
     blk = bi.b
-    data = isa(bi, BlocksAffinityIterator) ? (isempty(b.affinity) ? b.affinity : b.affinity[status+1]) : b.filter(b.block[status+1])
+    data = isa(bi, BlocksAffinityIterator) ? (isempty(blk.affinity) ? blk.affinity : blk.affinity[status]) : blk.prepare(blk.block[status])
     status = (status >= length(blk.block)) ? 0 : (status+1)
     (data,status)
 end
@@ -120,7 +136,7 @@ function Blocks(a::Array, by::Int=0, nsplits::Int=0)
     splits = map((x)->begin sz[by]=x; tuple(sz...); end, Base.splitrange(length(sz[by]), nsplits))
     #blocks = [slice(a,x) for x in splits]
     blocks = [a[x...] for x in splits]
-    Blocks(a, blocks, no_affinity, as_it_is)
+    Blocks(a, blocks, no_affinity, as_it_is, as_it_is)
 end
 
 function Blocks(A::Array, dims::Array=[])
@@ -149,7 +165,7 @@ function Blocks(A::Array, dims::Array=[])
             blkid += 1
         end
     end
-    Blocks(A, blocks, no_affinity, as_it_is)
+    Blocks(A, blocks, no_affinity, as_it_is, as_it_is)
 end
 
 function Blocks(f::File, nsplits::Int=0)
@@ -158,9 +174,9 @@ function Blocks(f::File, nsplits::Int=0)
     (nsplits == 0) && (nsplits = nworkers())
     splits = Base.splitrange(sz, nsplits)
     data = [(f.path, x) for x in splits]
-    Blocks(f, data, no_affinity, as_it_is)
+    Blocks(f, data, no_affinity, as_it_is, as_it_is)
 end
 
-Blocks{T<:BlockableIO}(aio::T, maxsize::Int) = Blocks(aio, [(aio,maxsize)], no_affinity, as_it_is)
-Blocks{T<:BlockableIO}(aio::T, approxsize::Int, dlm::Char) = Blocks(aio, [(aio,approxsize,dlm)], no_affinity, as_it_is)
+Blocks{T<:BlockableIO}(aio::T, maxsize::Int) = Blocks(aio, [(aio,maxsize)], no_affinity, as_it_is, as_it_is)
+Blocks{T<:BlockableIO}(aio::T, approxsize::Int, dlm::Char) = Blocks(aio, [(aio,approxsize,dlm)], no_affinity, as_it_is, as_it_is)
 

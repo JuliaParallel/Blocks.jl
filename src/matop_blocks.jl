@@ -95,7 +95,7 @@ function block_mul(mb::MatOpBlock)
         end
     end
 
-    Blocks(mb, blklist, afflist, as_it_is)
+    Blocks(mb, blklist, afflist, as_it_is, as_it_is)
 end
 
 ##

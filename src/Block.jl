@@ -8,7 +8,7 @@ using HDFS.MapReduce
 importall   Base
 importall   DataFrames
 
-export      Blocks, |>,
+export      Blocks, |>, .>,
             blocks, affinities,
             as_it_is, as_io, as_recordio, as_lines, as_bufferedio, as_bytearray,
 
