@@ -6,12 +6,20 @@ A framework to:
 - compose actions on chunks by chaining functions 
 - do map and reduce operations with the above
 
-As examples of its utility, it has been used to implement chunked and distributed operations on disk files, HDFS files, arrays, and dataframes.
+It represents a typical pattern observed across several types of parallel processing tasks. The Blocks framework can be leveraged to build convenience APIs for parallelizing such tasks. The composability of Blocks lends to a convenient and compact syntax.
+
+As examples of its utility, it has been used to implement chunked and distributed operations on disk files, HDFS files, IO streams, arrays, matrices, and dataframes. Some of them are included in the Blocks module while the rest are available as sub modules of Blocks:
+- Blocks.Hadoop
+- Blocks.DDataFrames
+- Blocks.MatOp
+
 
 ### Creating Blocks
 #### Disk Files
 ````
-Blocks(file::File, nblocks::Int=0)
+using Blocks
+
+Block(file::File, nblocks::Int=0)
     Where nblocks is the number of chunks to divide the file into.
     Number of chunks (nblocks) defaults to number of worker processes.
     Each chunk is represented as the file and the byte range.
@@ -20,29 +28,50 @@ Blocks(file::File, nblocks::Int=0)
 
 #### HDFS Files
 ````
-Blocks(file::HdfsURL)
+using Blocks
+using Blocks.Hadoop
+
+Block(file::HdfsURL)
     Each chunk is a block in HDFS.
     Processor affinity of each chunk is set to machines where this block has been replicated by HDFS.
 ````
 
 #### Arrays:
 ````
-Blocks(A::Array, dims::Array)
+using Blocks
+
+Block(A::Array, dims::Array)
     Chunks created across dimensions specified in dims.
     Chunks are not pre-distributed and any chunk can be processed at any processor.
 
-Blocks(A::Array, dim::Int, nblocks::Int)
+Block(A::Array, dim::Int, nblocks::Int)
     Chunked to nblocks chunks on dimension dim.
     Chunks are not pre-distributed and any chunk can be processed at any processor.
+````
+
+#### Streams:
+````
+using Blocks
+
+Block(stream::Union(IOStream,AsyncStream,IOBuffer,BlockIO), maxsize::Int)
+    Iterating on the block thus created would read a chunk of data from `stream`.
+    Each chunk will represent a `maxsize` sized data block read from `stream`.
+
+Block(stream::Union(IOStream,AsyncStream,IOBuffer,BlockIO), approxsize::Int, dlm::Char)
+    Iterating on the block thus created would read a chunk of data from `stream`.
+    Each chunk is  approximately of size `approxsize` and ends with the `dlm` character.
 ````
 
 #### Distributed DataFrames:
 Blocks introduces a distributed `DataFrame` type named `DDataFrame`. It holds referenced to multiple remote data frames, on multiple processors. A large table can be read in parallel into a DDataFrame by using the special `dreadtable` method. 
 
 ````
+using Blocks
+using Blocks.DDataFrames
+
 dreadtable(filename::String; kwargs...)
-dreadtable(blocks::Blocks; kwargs...)
-    Where blocks are created from disk or HDFS files as described in sections above.
+dreadtable(blocks::Block; kwargs...)
+    Where blocks are created from disk or HDFS files or from streams as described in sections above.
 dreadtable(ios::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks::Bool=true; kwargs...)
     Where 
         ios is a stream of data
@@ -54,6 +83,10 @@ dreadtable(ios::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks::Bool=t
 A `DDataFrame` is easily represented as Blocks. `DDataFrame` has been used with `Blocks` to implement most `DataFrame` operations in a distributed manner. Most methods defined on a DataFrame also work on DDataFrames in a distributed manner using `pmap` and `reduce` to operate on chunks parallely.
 
 ````
+julia> using Blocks
+
+julia> using Blocks.DDataFrames
+
 julia> dt = dreadtable("test.csv")
 100x10 DDataFrame. 2 blocks over 2 processors
 
@@ -79,7 +112,7 @@ true
 ### Composing Actions on Blocks
 Functions can be chained and then applied on to chunks in a block with a `pmap` or `pmapreduce`. The Julia notation `|>` is used to indicate chaining. For example to read a block of DataFrame from a chunk of a disk file:
 ````
-b = Blocks(File(filename)) |> as_io |> as_recordio |> as_dataframe
+b = Block(File(filename)) |> as_io |> as_recordio |> as_dataframe
 ````
 Each function in the chain works on the output of the previous function.
 
@@ -96,7 +129,7 @@ Following is a list of functions provided in the package. User specified functio
 Regular Julia map-reduce methods can be used on blocks. The map methods receive the chunks as they have been processed by the chain of actions composed into the Blocks.
 
 ````
-julia> ba = Blocks([1:100], 1, 10);
+julia> ba = Block([1:100], 1, 10);
 
 julia> pmap(x->sum(x), ba)
 10-element Any Array:
@@ -114,7 +147,7 @@ julia> pmap(x->sum(x), ba)
 julia> pmapreduce(x->sum(x), +, ba)
 5050
 
-julia> ba = Blocks([1:100], 1, 10);
+julia> ba = Block([1:100], 1, 10);
 
 julia> map(x->sum(x), ba)
 10-element Any Array:

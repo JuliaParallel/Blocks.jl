@@ -3,7 +3,8 @@ const NPROCS = isempty(ARGS) ? 3 : int(ARGS[1])
 
 function load_pkgs()
     println("loading packages...")
-    @everywhere using Block
+    @everywhere using Blocks
+    @everywhere using Blocks.MatOp
     #@everywhere using Base.FS
     #@everywhere using DataFrames
 end
@@ -17,7 +18,7 @@ function do_mul()
 
     println("making blocks...")
     mb = MatOpBlock(a3, a4, :*, NPROCS)
-    blk = Blocks(mb)
+    blk = Block(mb)
     println("running matrix operation...")
     t1 = @elapsed (result = op(blk))
 
@@ -39,7 +40,7 @@ function do_mul_large()
 
     println("making blocks...")
     mb = MatOpBlock(a3, a4, :*, NPROCS)
-    blk = Blocks(mb)
+    blk = Block(mb)
     println("running matrix operation...")
     t1 = @elapsed (result = op(blk))
 
@@ -58,5 +59,5 @@ println("\tnprocs: $(nprocs())")
 load_pkgs()
 
 do_mul()
-do_mul_large()
+#do_mul_large()
 

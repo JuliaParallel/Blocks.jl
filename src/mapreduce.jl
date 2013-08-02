@@ -7,7 +7,7 @@ function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
     m(filt...)
 end
 
-#function map{T<:BlockableIO}(m::Union(DataType,Function), bf::Blocks{T}...)
+#function map{T<:BlockableIO}(m::Union(DataType,Function), bf::Block{T}...)
 #    filters = [x.filter for x in bf]
 #    blks = [x.block[1] for x in bf]
 #    ret = {}
@@ -16,15 +16,17 @@ end
 #    end
 #    ret
 #end
-function map{T<:Any}(m::Union(DataType,Function), bf::Blocks{T}...)
+#function map{T<:Any}(m::Union(DataType,Function), bf::Block{T}...)
+function map(m::Union(DataType,Function), bf::Block...)
     blks = [blocks(x) for x in bf]
     filters = [x.filter for x in bf]
     fc = (b...)->filtered_fn_call(m, filters, b...)
     map(fc, blks...)
 end
 
-#pmap{T<:BlockableIO}(m, bf::Blocks{T}...; kwargs...) = block_pmap(m, [blocks(b) for b in bf]...; kwargs...)
-function pmap{T<:Any}(m, bf::Blocks{T}...; kwargs...)
+#pmap{T<:BlockableIO}(m, bf::Block{T}...; kwargs...) = block_pmap(m, [blocks(b) for b in bf]...; kwargs...)
+#function pmap{T<:Any}(m, bf::Block{T}...; kwargs...)
+function pmap(m, bf::Block...; kwargs...)
     affs = [x.affinity for x in bf]
     filters = [x.filter for x in bf]
     fc = (b...)->filtered_fn_call(m, filters, b...)
@@ -90,9 +92,9 @@ function pmap{T<:Any}(m, bf::Blocks{T}...; kwargs...)
 end
 
 
-pmapreduce(m, r, bf::Blocks...) = reduce(r, pmap(m, bf...))
-pmapreduce(m, r, v0, bf::Blocks...) = reduce(r, v0, pmap(m, bf...))
+pmapreduce(m, r, bf::Block...) = reduce(r, pmap(m, bf...))
+pmapreduce(m, r, v0, bf::Block...) = reduce(r, v0, pmap(m, bf...))
 
-mapreduce(m::Union(DataType,Function), r::Function, bf::Blocks...) = reduce(r, map(m, bf...))
-mapreduce(m::Union(DataType,Function), r::Function, v0, bf::Blocks...) = reduce(r, v0, map(m, bf...))
+mapreduce(m::Union(DataType,Function), r::Function, bf::Block...) = reduce(r, map(m, bf...))
+mapreduce(m::Union(DataType,Function), r::Function, v0, bf::Block...) = reduce(r, v0, map(m, bf...))
 

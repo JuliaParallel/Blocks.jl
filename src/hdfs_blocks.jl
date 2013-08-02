@@ -1,5 +1,14 @@
+module Hadoop
 
-function Blocks(f::HdfsURL)
+using Blocks
+using HDFS
+using HDFS.MapReduce
+
+importall Blocks
+
+export Block
+
+function Block(f::HdfsURL)
     worker_ids = workers()
     worker_ips = map(x->getaddrinfo(isa(x, LocalProcess)?getipaddr():x.host), map(x->Base.worker_from_id(x), worker_ids))
 
@@ -10,6 +19,7 @@ function Blocks(f::HdfsURL)
     file_sz = filestat.size
 
     data = [(f, ((x-1)*block_sz+1):(min(file_sz,x*block_sz))) for x in 1:length(block_dist)]
-    Blocks(f, data, block_wrkr_ids, as_it_is, as_it_is)
+    Block(f, data, block_wrkr_ids, as_it_is, as_it_is)
 end
 
+end # module Hadoop

@@ -5,7 +5,8 @@ const nloops = 10
 
 function load_pkgs()
     println("loading packages...")
-    @everywhere using Block
+    @everywhere using Blocks
+    @everywhere using Blocks.DDataFrames
     #@everywhere using Base.FS
     #@everywhere using DataFrames
 end

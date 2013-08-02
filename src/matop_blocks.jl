@@ -1,3 +1,11 @@
+module MatOp
+
+using Blocks
+
+importall Blocks
+import Base.*
+
+export MatOpBlock, Block, op, *
 
 # Blocked operations on matrices
 type MatOpBlock
@@ -22,12 +30,12 @@ type MatOpBlock
     end
 end
 
-function Blocks(mb::MatOpBlock)
+function Block(mb::MatOpBlock)
     (mb.oper == :*) && return block_mul(mb)
     error("operation $(mb.oper) not supported")
 end
 
-op{T<:MatOpBlock}(blk::Blocks{T}) = (eval(blk.source.oper))(blk)
+op{T<:MatOpBlock}(blk::Block{T}) = (eval(blk.source.oper))(blk)
 
 ##
 # internal methods
@@ -121,13 +129,13 @@ function block_mul(mb::MatOpBlock)
         end
     end
 
-    #Blocks(mb, blklist, afflist, as_it_is, (t)->as_mat_splits(mb, t))
-    Blocks(mb, blklist, afflist, as_it_is, (t)->as_remote_splits(mb, t))
+    #Block(mb, blklist, afflist, as_it_is, (t)->as_mat_splits(mb, t))
+    Block(mb, blklist, afflist, as_it_is, (t)->as_remote_splits(mb, t))
 end
 
 ##
 # operations
-function *{T<:MatOpBlock}(blk::Blocks{T})
+function *{T<:MatOpBlock}(blk::Block{T})
     mb = blk.source
     m1 = mb.m1
     m2 = mb.m2
@@ -142,3 +150,4 @@ function *{T<:MatOpBlock}(blk::Blocks{T})
     res
 end
 
+end # module MatOP

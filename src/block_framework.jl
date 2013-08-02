@@ -1,11 +1,6 @@
-abstract AbstractBlocks{T,D}
 typealias BlockableIO Union(IOStream,AsyncStream,IOBuffer,BlockIO)
 
-# Blocks can chunk content that is:
-#   - non-streaming
-#   - accessible in parallel
-#   - distributed across processors
-type Blocks{T} <: AbstractBlocks{T}
+type Block{T} 
     source::T
     block::Array            # chunk definition
     affinity::Array         # chunk affinity
@@ -67,30 +62,30 @@ function as_recordio(x::Tuple)
     end
 end
 
-|>(b::Blocks, f::Function) = filter(f, b)
-function filter(f::Function, b::Blocks)
+|>(b::Block, f::Function) = filter(f, b)
+function filter(f::Function, b::Block)
     let oldf = b.filter
         b.filter = (x)->f(oldf(x))
         return b
     end
 end
 
-function filter(flist::Vector{Function}, b::Blocks)
+function filter(flist::Vector{Function}, b::Block)
     for f in flist
         filter(f, b)
     end
     b
 end
 
-.>(b::Blocks, f::Function) = prepare(f, b)
-function prepare(f::Function, b::Blocks)
+.>(b::Block, f::Function) = prepare(f, b)
+function prepare(f::Function, b::Block)
     let oldf = b.prepare
         b.prepare = (x)->f(oldf(x))
         return b
     end
 end
 
-function prepare(flist::Vector{Function}, b::Blocks)
+function prepare(flist::Vector{Function}, b::Block)
     for f in flist
         prepare(f, b)
     end
@@ -99,53 +94,53 @@ end
 
 ##
 # Iterators for blocks and affinities
-abstract BlocksIterator{T}
-type BlocksAffinityIterator{T} <: BlocksIterator{T}
-    b::Blocks{T}
+abstract BlockIterator{T}
+type BlockAffinityIterator{T} <: BlockIterator{T}
+    b::Block{T}
 end
-type BlocksDataIterator{T} <: BlocksIterator{T}
-    b::Blocks{T}
+type BlockDataIterator{T} <: BlockIterator{T}
+    b::Block{T}
 end
-start{T<:BlocksIterator}(bi::T) = 1
-done{T<:BlocksIterator}(bi::T,status) = (0 == status)
-function next{T<:BlockableIO}(bi::BlocksIterator{T},status)
+start{T<:BlockIterator}(bi::T) = 1
+done{T<:BlockIterator}(bi::T,status) = (0 == status)
+function next{T<:BlockableIO}(bi::BlockIterator{T},status)
     blk = bi.b
-    data = isa(bi, BlocksAffinityIterator) ? blk.affinity : blk.prepare(blk.block[1])
+    data = isa(bi, BlockAffinityIterator) ? blk.affinity : blk.prepare(blk.block[1])
     status = eof(blk.source) ? 0 : (status+1)
     (data,status)
 end
-function next{T<:Any}(bi::BlocksIterator{T},status)
+function next{T<:Any}(bi::BlockIterator{T},status)
     blk = bi.b
-    data = isa(bi, BlocksAffinityIterator) ? (isempty(blk.affinity) ? blk.affinity : blk.affinity[status]) : blk.prepare(blk.block[status])
+    data = isa(bi, BlockAffinityIterator) ? (isempty(blk.affinity) ? blk.affinity : blk.affinity[status]) : blk.prepare(blk.block[status])
     status = (status >= length(blk.block)) ? 0 : (status+1)
     (data,status)
 end
 
-blocks(b::Blocks) = BlocksDataIterator(b)
-affinities(b::Blocks) = BlocksAffinityIterator(b)
+blocks(b::Block) = BlockDataIterator(b)
+affinities(b::Block) = BlockAffinityIterator(b)
 
 
 ##
-# Blocks implementations for common types
+# Block implementations for common types
 
-function Blocks(a::Array, by::Int=0, nsplits::Int=0)
+function Block(a::Array, by::Int=0, nsplits::Int=0)
     asz = size(a)
     (by == 0) && (by = length(asz))
     (nsplits == 0) && (nsplits = nworkers())
     sz = [1:x for x in asz]
     splits = map((x)->begin sz[by]=x; tuple(sz...); end, Base.splitrange(length(sz[by]), nsplits))
-    #blocks = [slice(a,x) for x in splits]
-    blocks = [a[x...] for x in splits]
-    Blocks(a, blocks, no_affinity, as_it_is, as_it_is)
+    #blks = [slice(a,x) for x in splits]
+    blks = [a[x...] for x in splits]
+    Block(a, blks, no_affinity, as_it_is, as_it_is)
 end
 
-function Blocks(A::Array, dims::Array=[])
+function Block(A::Array, dims::Array=[])
     isempty(dims) && error("no dimensions specified")
     dimsA = [size(A)...]
     ndimsA = ndims(A)
     alldims = [1:ndimsA]
 
-    blocks = {A}
+    blks = {A}
     if dims != alldims
         otherdims = setdiff(alldims, dims)
         idx = fill!(cell(ndimsA), 1)
@@ -156,27 +151,27 @@ function Blocks(A::Array, dims::Array=[])
             idx[d] = 1:size(A,d)
         end
         numblocks = *(itershape...)
-        blocks = cell(numblocks)
+        blks = cell(numblocks)
         blkid = 1
         cartesianmap(itershape) do idxs...
             ia = [idxs...]
             idx[otherdims] = ia
-            blocks[blkid] = reshape(A[idx...], Asliceshape)
+            blks[blkid] = reshape(A[idx...], Asliceshape)
             blkid += 1
         end
     end
-    Blocks(A, blocks, no_affinity, as_it_is, as_it_is)
+    Block(A, blks, no_affinity, as_it_is, as_it_is)
 end
 
-function Blocks(f::File, nsplits::Int=0)
+function Block(f::File, nsplits::Int=0)
     sz = filesize(f.path)
     (sz == 0) && error("missing or empty file: $(f.path)")
     (nsplits == 0) && (nsplits = nworkers())
     splits = Base.splitrange(sz, nsplits)
     data = [(f.path, x) for x in splits]
-    Blocks(f, data, no_affinity, as_it_is, as_it_is)
+    Block(f, data, no_affinity, as_it_is, as_it_is)
 end
 
-Blocks{T<:BlockableIO}(aio::T, maxsize::Int) = Blocks(aio, [(aio,maxsize)], no_affinity, as_it_is, as_it_is)
-Blocks{T<:BlockableIO}(aio::T, approxsize::Int, dlm::Char) = Blocks(aio, [(aio,approxsize,dlm)], no_affinity, as_it_is, as_it_is)
+Block{T<:BlockableIO}(aio::T, maxsize::Int) = Block(aio, [(aio,maxsize)], no_affinity, as_it_is, as_it_is)
+Block{T<:BlockableIO}(aio::T, approxsize::Int, dlm::Char) = Block(aio, [(aio,approxsize,dlm)], no_affinity, as_it_is, as_it_is)
 
