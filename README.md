@@ -49,6 +49,52 @@ Block(A::Array, dim::Int, nblocks::Int)
     Chunks are not pre-distributed and any chunk can be processed at any processor.
 ````
 
+#### Matrix Operations
+Parallelized operations on matrices can be represented and executed using Blocks. Module `Blocks.MatOp` provides a set of convenience APIs using the `MatOpBlock` object.
+
+````
+julia> using Blocks
+
+julia> using Blocks.MatOp
+
+julia> 
+
+julia> # create two matrices
+
+julia> m1 = rand(Int, 6, 10);
+
+julia> m2 = rand(Int, 10, 6);
+
+julia> 
+
+julia> # create a parallel matrix operation using the two, multiplication in this case
+
+julia> mb = MatOpBlock(m1, m2, :*, 3);
+
+julia> 
+
+julia> # represent that in blocks
+
+julia> blk = Block(mb);
+
+julia> 
+
+julia> # execute the operation
+
+julia> result = op(blk);
+
+julia> 
+
+julia> # verify the result
+
+julia> tr = m1*m2;
+
+julia> 
+
+julia> all(tr .== result)
+true
+````
+
 #### Streams:
 ````
 using Blocks
