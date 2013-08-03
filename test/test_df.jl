@@ -11,8 +11,11 @@ function load_pkgs()
     #@everywhere using DataFrames
 end
 
-println("adding 3 more processors...")
-addprocs(3)
+if nprocs() < 4
+    addwrkrs = 4 - nprocs()
+    println("adding $addwrkrs more processors...")
+    addprocs(addwrkrs)
+end
 println("\tnprocs: $(nprocs())")
 load_pkgs()
 

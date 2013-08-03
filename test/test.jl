@@ -1,9 +1,10 @@
 const datafile = "test.csv"
 const nloops = 10
 
-function testfn(f::Function, s::String)
+function testfn(f::Function, s::String, exp_res)
     println("\t$(s)...")
     ret = f()
+    @assert (ret == exp_res)
     println("\t\tresult: $(ret)")
 
     t = @elapsed for i in 1:nloops f(); end
@@ -40,17 +41,17 @@ end
 
 function do_all_tests()
     println("running tests...")
-    testfn(f_df_pmap, "pmap file->dataframe")
-    testfn(f_df_map, "map file->dataframe")
-    testfn(a_a1_pmap, "pmap array->array")
-    testfn(a_a1_map, "map array->array")
-    testfn(a_a2_pmap, "pmap array->array")
-    testfn(a_a2_map, "map array->array")
-    testfn(f_ios_pmap, "pmap file->iostream")
-    testfn(f_ios_map, "map file->iostream")
-    testfn(f_stream_pmap, "pmap stream->lines")
-    testfn(f_stream_map, "map stream->lines")
-    testfn(procaff, "pmap processor affinity")
+    testfn(f_df_pmap, "pmap file->dataframe", 100)
+    testfn(f_df_map, "map file->dataframe", 100)
+    testfn(a_a1_pmap, "pmap array->array", 1000001000000)
+    testfn(a_a1_map, "map array->array", 1000001000000)
+    testfn(a_a2_pmap, "pmap array->array", 1001000)
+    testfn(a_a2_map, "map array->array", 1001000)
+    testfn(f_ios_pmap, "pmap file->iostream", 100)
+    testfn(f_ios_map, "map file->iostream", 100)
+    testfn(f_stream_pmap, "pmap stream->lines", 100)
+    testfn(f_stream_map, "map stream->lines", 100)
+    testfn(procaff, "pmap processor affinity", 100)
 end
 
 load_pkgs()
