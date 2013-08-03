@@ -13,6 +13,7 @@ As examples of its utility, it has been used to implement chunked and distribute
 - Blocks.DDataFrames
 - Blocks.MatOp
 
+[![Build Status](https://travis-ci.org/tanmaykm/Blocks.jl.png)](https://travis-ci.org/tanmaykm/Blocks.jl)
 
 ### Creating Blocks
 #### Disk Files
