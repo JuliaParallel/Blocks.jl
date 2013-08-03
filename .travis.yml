@@ -14,4 +14,4 @@ script:
     - julia -e 'versioninfo(); Pkg.init(); Pkg.add("DataFrames"); Pkg.add("HDFS");'
     - mkdir -p ~/.julia/Blocks
     - cp -R ./* ~/.julia/Blocks/
-    - julia ~/.julia/Blocks/test/runtests.jl
+    - cd ~/.julia/Blocks/test/; julia runtests.jl
