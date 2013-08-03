@@ -11,7 +11,7 @@ before_install:
     - git config --global user.name "Travis User"
     - git config --global user.email "travis@example.net"
 script:
-    - julia -e "Pkg.init()"
+    - julia -e 'versioninfo(); Pkg.init(); Pkg.add("DataFrames"); Pkg.add("HDFS");'
     - mkdir -p ~/.julia/Blocks
     - cp -R ./* ~/.julia/Blocks/
     - julia ~/.julia/Blocks/test/runtests.jl
