@@ -53,7 +53,52 @@ end
 
 function as_dataframe(bio::BlockableIO; kwargs...)
     kwargs = _check_readtable_kwargs(kwargs...)
-    tbl = readtable(bio; kwargs...)
+    #tbl = readtable(bio; kwargs...)
+    nbytes = -1
+    if isa(bio, IOStream)
+        p1 = position(bio)
+        seekend(bio)
+        nbytes = position(bio) - p1
+        seek(bio, p1)
+    elseif isa(bio, IOBuffer) || isa(bio, BlockIO)
+        nbytes = nb_available(bio)
+    else
+        error("can not determine size of stream")
+    end
+
+    kwdict = { :header => false,
+        :separator => ',',
+        :allowquotes => true,
+        :quotemark => '"',
+        :decimal => '.',
+        :nastrings => ASCIIString["", "NA"],
+        :truestrings => ASCIIString["T", "t", "TRUE", "true"],
+        :falsestrings => ASCIIString["F", "f", "FALSE", "false"],
+        :makefactors => false,
+        :colnames => UTF8String[],
+        :cleannames => false,
+        :coltypes => Any[],
+        :allowcomments => false,
+        :commentmark => '#',
+        :ignorepadding => true,
+        :skipstart => 0,
+        :skiprows => Int[],
+        :skipblanks => true,
+        :encoding => :utf8 }
+
+    for kw in kwargs
+        kwdict[kw[1]] = kw[2]
+    end
+
+    poargs = {}
+    for argname in names(DataFrames.ParseOptions)
+        push!(poargs, kwdict[argname])
+    end
+    po = DataFrames.ParseOptions(poargs...)
+
+    p = DataFrames.ParsedCSV(Array(Uint8, nbytes), Array(Int, 1), Array(Int, 1), BitArray(1))
+
+    tbl = DataFrames.readtable!(p, bio, nbytes, po)
     tbl
 end
 
