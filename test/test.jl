@@ -26,8 +26,8 @@ function procaff()
     b = Block(File(datafile)) |> as_io |> as_recordio |> as_lines
     # create random affinities
     wrkrids = workers()
-    nw = length(wrkrids)
-    b.affinity = map(x->randsample(wrkrids, min(3,nw)), 1:nw)
+    #nw = length(wrkrids)
+    b.affinity = shuffle!(wrkrids) #map(x->randsample(wrkrids, min(3,nw)), 1:nw)
     pmapreduce(x->length(x), +, b)
 end
 
