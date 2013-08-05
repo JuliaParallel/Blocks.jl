@@ -124,9 +124,12 @@ end
 
 function dreadtable(b::Block; kwargs...)
     kwargs = _check_readtable_kwargs(kwargs...)
-    b.affinity = workers()
+    if (b.affinity == Blocks.no_affinity) 
+        b.affinity = [[w] for w in workers()]
+    end
     rrefs = pmap(x->as_dataframe(x;kwargs...), b; fetch_results=false)
-    DDataFrame(rrefs, b.affinity)
+    procs = map(x->x.where, rrefs)
+    DDataFrame(rrefs, procs)
 end
 dreadtable(fname::String; kwargs...) = dreadtable(Block(File(fname)) |> as_io |> as_recordio; kwargs...)
 function dreadtable(io::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks::Bool=true; kwargs...)
