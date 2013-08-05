@@ -10,7 +10,7 @@ export Block
 
 function Block(f::HdfsURL)
     worker_ids = workers()
-    worker_ips = map(x->getaddrinfo(isa(x, LocalProcess)?getipaddr():x.host), map(x->Base.worker_from_id(x), worker_ids))
+    worker_ips = map(x->getaddrinfo(string(isa(x, LocalProcess)?getipaddr():x.host)), map(x->Base.worker_from_id(x), worker_ids))
 
     block_dist = hdfs_blocks(f, 1, 0, true)
     block_wrkr_ids = map(ips->worker_ids[findin(worker_ips, ips)], block_dist)
