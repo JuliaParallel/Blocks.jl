@@ -14,8 +14,9 @@ export Block, DDataFrame, as_dataframe, dreadtable, dwritetable, writetable,
         nrow, ncol, colnames, colnames!, clean_colnames!, rename, rename!, index, 
         head, tail, vcat, hcat, rbind, cbind, copy, deepcopy, isfinite, isnan, isna,
         without, delete!, deleterows!, with, within!, complete_cases, complete_cases!, 
-        gather, 
-        merge, colwise, by
+        gather, getindex,
+        merge, colwise, by,
+        describe
 
 # TODO:
 # duplicated, drop_duplicates!
@@ -150,6 +151,221 @@ function dreadtable(io::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks
     DDataFrame(rrefs, procs)
 end
 
+
+##
+# describe for ddataframe
+# approximate median and quantile calculation
+# not very efficient as it is an iterative process
+function _randcolval(t, colname, minv, maxv)
+    ex = :(minv .< colname .< maxv)
+    ex.args[1] = minv
+    ex.args[3] = symbol(colname)
+    ex.args[5] = maxv
+    md = t[ex,symbol(colname)]
+    (length(md) == 0) && (return [])
+    return md[rand(1:length(md))]
+end
+
+function _count_col_seps(t::DataFrame, colname, v)
+    nlt = ngt = 0
+    col = t[colname]
+    for idx in 1:nrow(t)
+        isna(col[idx]) && continue
+        (col[idx] > v) && (ngt += 1)
+        (col[idx] < v) && (nlt += 1)
+    end
+    nlt,ngt
+end
+
+function _count_col_seps(dt::DDataFrame, colname, v)
+    f = let colname=colname,v=v
+        (t)->_count_col_seps(fetch(t), colname, v)
+    end
+    nltgt = pmap(f, Block(dt))
+    nlt = ngt = 0
+    for (n1lt,n1gt) in nltgt
+        nlt += n1lt
+        ngt += n1gt
+    end
+    (nlt,ngt)
+end
+
+function _num_na(t, cnames)
+    colnames = collect(cnames)
+    nrows = nrow(t)
+    cnts = zeros(Int,length(colnames))
+    c = t[colnames]
+    for cidx in 1:length(colnames)
+        cc = c[cidx]
+        cnt = 0
+        for idx in 1:nrows
+            isna(cc[idx]) && (cnt += 1)
+        end
+        cnts[cidx] = cnt
+    end
+    cnts
+end
+
+function _colranges(t::DataFrame, cnames)
+    colnames = collect(cnames)
+    nrows = nrow(t)
+    ncols = length(colnames)
+    mins = cell(ncols)
+    maxs = cell(ncols)
+    sums = zeros(ncols)
+    numvalids = zeros(Int,ncols)
+    for cidx in 1:ncols
+        _min = _max = NA
+        _sum = 0
+        _numvalid = 0
+        cc = t[colnames[cidx]]
+        for idx in 1:nrows
+            ccval = cc[idx]
+            if !isna(ccval) 
+                (isna(_min) || (_min > ccval)) && (_min = ccval)
+                (isna(_max) || (_max < ccval)) && (_max = ccval)
+                _sum += ccval
+                _numvalid += 1
+            end
+        end
+        mins[cidx] = _min
+        maxs[cidx] = _max
+        sums[cidx] = _sum
+        numvalids[cidx] = _numvalid
+    end
+    mins,maxs,sums,numvalids
+end
+
+function _colranges(dt::DDataFrame, cnames)
+    f = let cnames=cnames
+            (t)->_colranges(fetch(t), cnames)
+        end
+    ret = pmap(f, Block(dt))
+    allmins = map(x->x[1], ret)
+    allmaxs = map(x->x[2], ret)
+    allsums = map(x->x[3], ret)
+    allnumvalids = map(x->x[4], ret)
+    ncols = length(cnames)
+
+    mins = {}
+    maxs = {}
+    sums = {}
+    numvalids = {}
+    for cidx in 1:ncols
+        push!(mins, mapreduce(x->x[cidx], min, allmins))
+        push!(maxs, mapreduce(x->x[cidx], max, allmaxs))
+        push!(sums, mapreduce(x->x[cidx], +, allsums))
+        push!(numvalids, mapreduce(x->x[cidx], +, allnumvalids))
+    end
+    mins,maxs,(sums./numvalids),numvalids
+end
+
+function _sorted_col_vals_at_pos(dt::DDataFrame, col, numvalid, minv, maxv, pos)
+    (isna(minv) || isna(maxv)) && (return NA)
+    posr = numvalid - pos
+
+    while true
+        # get a random value between min and max for col
+        f = let col=col,minv=minv,maxv=maxv
+            (t)->_randcolval(fetch(t), col, minv, maxv)
+        end
+        pivots = pmap(f, Block(dt))
+        pivots = filter(x->(x != []), pivots)
+        # there's no other value between minv and maxv. take pivot as one of min and max
+        (length(pivots) == 0) && (pivots = [minv, maxv])
+        pivot = pivots[rand(1:length(pivots))][1]
+
+        #println("pivot $pivot chosen from: $pivots")
+
+        nrowslt,nrowsgt = _count_col_seps(dt, col, pivot)
+
+        #println("for $(col) => $(minv):$(maxv). rowdist: $(nrowslt) - $(pos) - $(nrowsgt)")
+        if (nrowslt <= pos) && (nrowsgt <= posr)
+            return pivot
+        elseif (nrowsgt > posr)
+            minv = pivot
+        else  # (nrowslt > pos)
+            maxv = pivot
+        end
+    end
+end
+
+function _dquantile(dt::DDataFrame, cname, numvalid, minv, maxv, q)
+    qpos = quantile([1:numvalid], q)
+    lo = ifloor(qpos)
+    hi = iceil(qpos)
+
+    local retvals::Array
+
+    if lo == hi
+        retval = _sorted_col_vals_at_pos(dt, cname, numvalid, minv, maxv, lo)
+    else
+        retval1 = _sorted_col_vals_at_pos(dt, cname, numvalid, minv, maxv, lo)
+        retval2 = _sorted_col_vals_at_pos(dt, cname, numvalid, minv, maxv, hi)
+        retval = (retval1 + (retval2-retval1)*(qpos-lo))
+    end
+    retval
+end
+
+describe(dt::DDataFrame) = describe(STDOUT, dt)
+function describe(io, dt::DDataFrame)
+    nrows = nrow(dt)
+    cnames = colnames(dt)
+    ctypes = coltypes(dt)
+    qcolnames = String[]
+    for idx in 1:length(cnames)
+        ((ctypes[idx] <: Number)) && push!(qcolnames, cnames[idx])
+    end
+
+    numnas = pmapreduce(x->_num_na(fetch(x), cnames), +, Block(dt))
+    qcols = Dict()
+    if !isempty(qcolnames)
+        mins,maxs,means,numvalids = _colranges(dt, qcolnames)
+
+        for idx in 1:length(qcolnames)
+            q1 = _dquantile(dt, qcolnames[idx], numvalids[idx], mins[idx], maxs[idx], 0.25)
+            q2 = _dquantile(dt, qcolnames[idx], numvalids[idx], mins[idx], maxs[idx], 0.5)
+            q3 = _dquantile(dt, qcolnames[idx], numvalids[idx], mins[idx], maxs[idx], 0.75)
+
+            qcols[qcolnames[idx]] = {mins[idx], q1, q2, means[idx], q3, maxs[idx]}
+        end
+    end
+
+    statNames = ["Min", "1st Qu.", "Median", "Mean", "3rd Qu.", "Max"]
+    for idx in 1:length(cnames)
+        println(cnames[idx])
+        if numnas[idx] == nrows
+            println(io, " * All NA * ")
+            continue
+        end
+
+        if (ctypes[idx] <: Number)
+            statVals = qcols[cnames[idx]]
+            for i = 1:6
+                println(io, string(rpad(statNames[i], 8, " "), " ", string(statVals[i])))
+            end
+        else
+            println(io, "Length  $(nrows)")
+            println(io, "Type    $(ctypes[idx])")
+        end
+
+        println(io, "NAs     $(numnas[idx])")
+        println(io, "NA%     $(round(numnas[idx]*100/nrows, 2))%")
+        println(io, "")
+    end
+end
+
+
+##
+# indexing into DDataFrames
+function getindex(dt::DDataFrame, col_ind::DataFrames.ColumnIndex)
+    rrefs = pmap(x->getindex(fetch(x), col_ind), Block(dt); fetch_results=false)
+    DDataFrame(rrefs, dt.procs)
+end
+function getindex{T <: DataFrames.ColumnIndex}(dt::DDataFrame, col_inds::AbstractVector{T})
+    rrefs = pmap(x->getindex(fetch(x), col_inds), Block(dt); fetch_results=false)
+    DDataFrame(rrefs, dt.procs)
+end
 
 # Operations on Distributed DataFrames
 # TODO: colmedians, colstds, colvars, colffts, colnorms
