@@ -20,7 +20,7 @@ include("block_framework.jl")
 include("mapreduce.jl")
 
 # sub modules
-include("dataframe_blocks.jl")
+#include("dataframe_blocks.jl")
 #include("hdfs_blocks.jl")
 include("matop_blocks.jl")
 
