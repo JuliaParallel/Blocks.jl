@@ -9,7 +9,6 @@ A framework to:
 It represents a typical pattern observed across several types of parallel processing tasks. The Blocks framework can be leveraged to build convenience APIs for parallelizing such tasks. The composability of Blocks lends to a convenient and compact syntax.
 
 As examples of its utility, it has been used to implement chunked and distributed operations on disk files, HDFS files, IO streams, arrays, matrices, and dataframes. Some of them are included in the Blocks module while the rest are available as sub modules of Blocks:
-- Blocks.Hadoop
 - Blocks.DDataFrames
 - Blocks.MatOp
 
@@ -30,7 +29,7 @@ Block(file::File, nblocks::Int=0)
 #### HDFS Files
 ````
 using Blocks
-using Blocks.Hadoop
+using HDFS
 
 Block(file::HdfsURL)
     Each chunk is a block in HDFS.
