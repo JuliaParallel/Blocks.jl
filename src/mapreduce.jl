@@ -7,16 +7,6 @@ function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
     m(filt...)
 end
 
-#function map{T<:BlockableIO}(m::Union(DataType,Function), bf::Block{T}...)
-#    filters = [x.filter for x in bf]
-#    blks = [x.block[1] for x in bf]
-#    ret = {}
-#    while(reduce((iv,v)->iv&(!eof(v.source)), true, bf))
-#        push!(ret, filtered_fn_call(m, filters, blks...))
-#    end
-#    ret
-#end
-#function map{T<:Any}(m::Union(DataType,Function), bf::Block{T}...)
 function map(m::Union(DataType,Function), bf::Block...)
     blks = [blocks(x) for x in bf]
     filters = [x.filter for x in bf]
@@ -24,8 +14,6 @@ function map(m::Union(DataType,Function), bf::Block...)
     map(fc, blks...)
 end
 
-#pmap{T<:BlockableIO}(m, bf::Block{T}...; kwargs...) = block_pmap(m, [blocks(b) for b in bf]...; kwargs...)
-#function pmap{T<:Any}(m, bf::Block{T}...; kwargs...)
 function pmap(m, bf::Block...; kwargs...)
     affs = [x.affinity for x in bf]
     filters = [x.filter for x in bf]

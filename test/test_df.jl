@@ -6,9 +6,7 @@ const nloops = 10
 function load_pkgs()
     println("loading packages...")
     @everywhere using Blocks
-    @everywhere using Blocks.DDataFrames
-    #@everywhere using Base.FS
-    #@everywhere using DataFrames
+    @everywhere using DataFrames
 end
 
 if nprocs() < 4

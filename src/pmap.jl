@@ -82,17 +82,18 @@ end
 
 ##
 # generic map on any iterator
-function map(f::Union(Function,DataType), iters...)
-    result = {}
-    len = length(iters)
-    states = [start(iters[idx]) for idx in 1:len]
-
-    while all([!done(iters[idx],states[idx]) for idx in 1:len])
-        nxts = [next(iters[idx],states[idx]) for idx in 1:len]
-        map(idx->states[idx]=nxts[idx][2], 1:len)
-        nxtvals = [x[1] for x in nxts]
-        push!(result, f(nxtvals...))
-    end
-    [result...]
-end
-
+#
+#function map(f::Union(Function,DataType), iters...)
+#    result = {}
+#    len = length(iters)
+#    states = [start(iters[idx]) for idx in 1:len]
+#
+#    while all([!done(iters[idx],states[idx]) for idx in 1:len])
+#        nxts = [next(iters[idx],states[idx]) for idx in 1:len]
+#        map(idx->states[idx]=nxts[idx][2], 1:len)
+#        nxtvals = [x[1] for x in nxts]
+#        push!(result, f(nxtvals...))
+#    end
+#    [result...]
+#end
+#
