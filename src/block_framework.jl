@@ -70,26 +70,21 @@ function filter(f::Function, b::Block)
     end
 end
 
-function filter(flist::Vector{Function}, b::Block)
-    for f in flist
-        filter(f, b)
-    end
-    b
-end
-
-.>(b::Block, f::Function) = prepare(f, b)
-function prepare(f::Function, b::Block)
+.>(b::Block, f::Function) = prepare(b, f)
+function prepare(b::Block, f::Function)
     let oldf = b.prepare
         b.prepare = (x)->f(oldf(x))
         return b
     end
 end
 
-function prepare(flist::Vector{Function}, b::Block)
-    for f in flist
-        prepare(f, b)
+macro prepare(expr)
+    local nexpr = expr
+    while(isa(nexpr, Expr))
+        (nexpr.args[1] == :|>) && (nexpr.args[1] = :prepare)
+        nexpr = nexpr.args[2]
     end
-    b
+    esc(expr)
 end
 
 ##

@@ -5,7 +5,7 @@ using Base.FS
 importall   Base
 import      Base.peek, Base.throwto
 
-export      Block, |>, .>, BlockableIO,
+export      Block, |>, .>, prepare, @prepare, BlockableIO,
             blocks, affinities,
             as_it_is, as_io, as_recordio, as_lines, as_bufferedio, as_bytearray,
 

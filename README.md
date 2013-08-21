@@ -159,7 +159,14 @@ Functions can be chained and then applied on to chunks in a block with a `pmap` 
 ````
 b = Block(File(filename)) |> as_io |> as_recordio |> as_dataframe
 ````
-Each function in the chain works on the output of the previous function.
+Each function in the chain works on the output of the previous function. 
+
+Sometimes it is necessary to separate some of the actions that must be applied locally and serially (e.g. reading from an IO stream), from the remaining that can be distributed to remote processors (e.g. creating a dataframe out of the data chunk). Such actions can be chained by prepending the chain of functions with a `@prepare` macro. 
+````
+b = Block(File(filename))
+b = @prepare b |> as_io |> as_recordio |> as_bytearray
+b = b |> as_dataframe |> nrows
+````
 
 Following is a list of functions provided in the package. User specified functions can be chained in as well:
 - `as_io`: creates an `IO` instance from streams or files
