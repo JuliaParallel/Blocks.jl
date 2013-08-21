@@ -13,8 +13,8 @@ function testfn(f::Function, s::String, exp_res)
     println("\t\ttime: $(t/nloops)")
 end
 
-f_df_pmap() = pmapreduce(x->nrow(x), +, Block(File(datafile)) |> as_io |> as_recordio |> (x)->as_dataframe(x; header=false))
-f_df_map() = sum(map(x->nrow(x), Block(File(datafile)) |> as_io |> as_recordio |> (x)->as_dataframe(x; header=false)))
+#f_df_pmap() = pmapreduce(x->nrow(x), +, Block(File(datafile)) |> as_io |> as_recordio |> (x)->as_dataframe(x; header=false))
+#f_df_map() = sum(map(x->nrow(x), Block(File(datafile)) |> as_io |> as_recordio |> (x)->as_dataframe(x; header=false)))
 a_a1_pmap() = pmapreduce(x->sum(2*x), +, Block([1:1000000], 1, nworkers()))
 a_a1_map() = sum(map(x->sum(2*x), Block([1:1000000], 1, nworkers())))
 a_a2_pmap() = pmapreduce(x->sum(2*x), +, Block(reshape([1:1000],10,10,10), [1,2]))
@@ -42,8 +42,8 @@ end
 
 function do_all_tests()
     println("running tests...")
-    testfn(f_df_pmap, "pmap file->dataframe", 100)
-    testfn(f_df_map, "map file->dataframe", 100)
+    #testfn(f_df_pmap, "pmap file->dataframe", 100)
+    #testfn(f_df_map, "map file->dataframe", 100)
     testfn(a_a1_pmap, "pmap array->array", 1000001000000)
     testfn(a_a1_map, "map array->array", 1000001000000)
     testfn(a_a2_pmap, "pmap array->array", 1001000)
