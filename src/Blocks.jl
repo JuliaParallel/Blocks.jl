@@ -3,7 +3,7 @@ module Blocks
 using Base.FS
 
 importall   Base
-import      Base.peek, Base.throwto
+import      Base.peek, Base.throwto, Base.AsyncStream
 
 export      Block, |>, .>, prepare, @prepare, BlockableIO,
             blocks, affinities,
