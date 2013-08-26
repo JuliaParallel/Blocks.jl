@@ -18,7 +18,7 @@ end
 a_a1_pmap() = pmapreduce(x->sum(2*x), +, Block([1:1000000], 1, nworkers()))
 a_a1_map() = sum(map(x->sum(2*x), Block([1:1000000], 1, nworkers())))
 a_a2_pmap() = pmapreduce(x->sum(2*x), +, Block(reshape([1:1000],10,10,10), [1,2]))
-a_a2_map() = sum(map(x->sum(2*x), Block(reshape([1:1000],10,10,10), [1,2])))
+a_a2_map = ()->sum(map(x->sum(2*x), Block(reshape([1:1000],10,10,10), [1,2])))
 f_ios_pmap() = pmapreduce(x->length(x), +, Block(File(datafile)) |> as_io |> as_recordio |> as_lines)
 f_ios_map() = sum(map(x->length(x), Block(File(datafile)) |> as_io |> as_recordio |> as_lines))
 f_stream_pmap() = pmapreduce(x->length(x), +, @prepare Block(open(datafile), 1000) |> as_recordio |> as_lines)
