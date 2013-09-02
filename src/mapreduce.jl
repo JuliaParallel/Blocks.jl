@@ -47,7 +47,7 @@ function pmap(m, bf::Block...; kwargs...)
     # in this case it's just an index.
     nextidx(p) = begin
         for (idx,a) in enumerate(afflist)
-            if !donelist[idx] && contains(a,p) 
+            if !donelist[idx] && (p in a) 
                 donelist[idx] = true
                 return idx
             end
