@@ -9,11 +9,14 @@ type Block{T}
 end
 
 const no_affinity = []
+const loopbackip = IPv4(127,0,0,1)
 
 ##
 # Pipelined filters
 # TODO: relook at IO integration after IO enhancements in base
 as_it_is(x) = x
+
+as_io(x) = open(x)
 function as_io(x::Tuple) 
     if isa(x[1], AsyncStream)
         aio = x[1]
@@ -158,6 +161,7 @@ function Block(A::Array, dims::Array=[])
     Block(A, blks, no_affinity, as_it_is, as_it_is)
 end
 
+
 function Block(f::File, nsplits::Int=0)
     sz = filesize(f.path)
     (sz == 0) && error("missing or empty file: $(f.path)")
@@ -167,6 +171,43 @@ function Block(f::File, nsplits::Int=0)
     Block(f, data, no_affinity, as_it_is, as_it_is)
 end
 
+function Block(f::File, recurse::Bool=true, nfiles_per_split::Int=0)
+    files = String[]
+    all_files(f.path, recurse, files)
+
+    data = {}
+    (nfiles_per_split == 0) && (nfiles_per_split = iceil(length(files)/nworkers()))
+
+    while length(files) > 0
+        println("nfiles_per_split: $nfiles_per_split")
+        println("lfiles: $(length(files))")
+        np = min(nfiles_per_split, length(files))
+        push!(data, files[1:np])
+        files = files[(np+1):end]
+    end
+
+    Block(dirs, data, no_affinity, as_it_is, as_it_is)
+end
+
+Block(f::File) = isdir(f.path) ? Block(f, true, 0) : Block(f, 0)
+
 Block{T<:BlockableIO}(aio::T, maxsize::Int) = Block(aio, [(aio,maxsize)], no_affinity, as_it_is, as_it_is)
 Block{T<:BlockableIO}(aio::T, approxsize::Int, dlm::Char) = Block(aio, [(aio,approxsize,dlm)], no_affinity, as_it_is, as_it_is)
+
+
+##
+# utility methods
+function all_files(path::String, recurse::Bool, list::Array)
+    files = readdir(path)
+
+    for file in files
+        fullpath = joinpath(path, file)
+        if isdir(fullpath) && recurse
+            all_files(fullpath, true, list)
+        else
+            push!(list, fullpath)
+        end
+    end
+    nothing
+end
 
