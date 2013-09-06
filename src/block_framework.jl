@@ -17,6 +17,7 @@ const loopbackip = IPv4(127,0,0,1)
 as_it_is(x) = x
 
 as_io(x) = open(x)
+as_io(f::File) = open(f.path)
 function as_io(x::Tuple) 
     if isa(x[1], AsyncStream)
         aio = x[1]
@@ -179,14 +180,12 @@ function Block(f::File, recurse::Bool=true, nfiles_per_split::Int=0)
     (nfiles_per_split == 0) && (nfiles_per_split = iceil(length(files)/nworkers()))
 
     while length(files) > 0
-        println("nfiles_per_split: $nfiles_per_split")
-        println("lfiles: $(length(files))")
         np = min(nfiles_per_split, length(files))
         push!(data, files[1:np])
         files = files[(np+1):end]
     end
 
-    Block(dirs, data, no_affinity, as_it_is, as_it_is)
+    Block([f], data, no_affinity, as_it_is, as_it_is)
 end
 
 Block(f::File) = isdir(f.path) ? Block(f, true, 0) : Block(f, 0)
