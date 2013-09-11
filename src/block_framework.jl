@@ -118,6 +118,30 @@ end
 blocks(b::Block) = BlockDataIterator(b)
 affinities(b::Block) = BlockAffinityIterator(b)
 
+# Returns blocks that have affinity for local process id.
+# If blocks have no affinity, returns a subset after equally dividing the blocks among processors.
+# Note: if blocks have affinity with multiple processors, this does not ensure an equal distribution.
+localpart(blk::Block) = localpart(blk, myid())
+function localpart(blk::Block, pid)
+    blks = collect(blocks(blk))
+    (nworkers() == 1) && return blks
+
+    local_blocks = {}
+    affs = collect(affinities(blk))
+    if isempty(affs) || isempty(affs[1])
+        # pick up only some parts corresponding to pid
+        n = pid-1
+        while n <= length(blks)
+            push!(local_blocks, blks[n])
+            n += nworkers()
+        end
+    else
+        for n in 1:length(affs)
+            (pid in affs[n]) && push!(local_blocks, blks[n])
+        end
+    end
+    local_blocks
+end
 
 ##
 # Block implementations for common types

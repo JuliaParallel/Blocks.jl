@@ -3,10 +3,10 @@ module Blocks
 using Base.FS
 
 importall   Base
-import      Base.peek, Base.throwto, Base.AsyncStream
+import      Base.peek, Base.throwto, Base.AsyncStream, Base.localpart
 
 export      Block, |>, .>, prepare, @prepare, BlockableIO,
-            blocks, affinities,
+            blocks, affinities, localpart,
             as_it_is, as_io, as_recordio, as_lines, as_bufferedio, as_bytearray,
 
             map, mapreduce, pmap, pmapreduce,
