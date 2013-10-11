@@ -7,7 +7,7 @@ function filtered_fn_call(m::Function, filters::Vector{Function}, b...)
     m(filt...)
 end
 
-function map(m::Union(DataType,Function), bf::Block...)
+function map(m::Base.Callable, bf::Block...)
     blks = [blocks(x) for x in bf]
     filters = [x.filter for x in bf]
     fc = (b...)->filtered_fn_call(m, filters, b...)
@@ -83,6 +83,6 @@ end
 pmapreduce(m, r, bf::Block...) = reduce(r, pmap(m, bf...))
 pmapreduce(m, r, v0, bf::Block...) = reduce(r, v0, pmap(m, bf...))
 
-mapreduce(m::Union(DataType,Function), r::Function, bf::Block...) = reduce(r, map(m, bf...))
-mapreduce(m::Union(DataType,Function), r::Function, v0, bf::Block...) = reduce(r, v0, map(m, bf...))
+mapreduce(m::Base.Callable, r::Function, bf::Block...) = reduce(r, map(m, bf...))
+mapreduce(m::Base.Callable, r::Function, v0, bf::Block...) = reduce(r, v0, map(m, bf...))
 
