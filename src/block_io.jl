@@ -51,7 +51,7 @@ peek(bio::BlockIO) = peek(bio.s)
 write(bio::BlockIO, p::Ptr, nb::Integer) = write(bio, p, int(nb))
 write(bio::BlockIO, p::Ptr, nb::Int) = write(bio.s, p, nb)
 write(bio::BlockIO, x::Uint8) = write(bio, Uint8[x])
-write{T}(bio::BlockIO, a::Array{T}, len) = write_sub(bio, a, 1, length(a))
+write{T}(bio::BlockIO, a::Array{T}, len) = write_sub(bio, a, 1, len)
 write{T}(bio::BlockIO, a::Array{T}) = write(bio, a, length(a))
 write_sub{T}(bio::BlockIO, a::Array{T}, offs, len) = isbits(T) ? write(bio, pointer(a,offs), len*sizeof(T)) : error("$T is not bits type")
 
