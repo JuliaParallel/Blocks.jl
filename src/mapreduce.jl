@@ -91,14 +91,3 @@ function pmapreduce(m, r, v0, bf::Block...)
     #reduce(r, v0, pmap(m, bf...))
 end
 
-mapreduce(m::Base.Callable, r::Base.Callable, bf::Block...) = reduce(r, map(m, bf...))
-function mapreduce(m::Base.Callable, r::Base.Callable, v0, bf::Block...) 
-    results = map(m, bf...)
-    ret = v0
-    for res in results
-        ret = r(ret, res)
-    end
-    ret
-    #reduce(r, v0, map(m, bf...))
-end
-
