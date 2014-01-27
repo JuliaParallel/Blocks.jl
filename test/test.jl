@@ -37,7 +37,6 @@ function load_pkgs()
     println("loading packages...")
     @everywhere using Blocks
     @everywhere using Base.FS
-    @everywhere using DataFrames
 end
 
 function do_all_tests()
