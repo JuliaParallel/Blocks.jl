@@ -191,7 +191,7 @@ function Block(f::File, nsplits::Int=0)
     sz = filesize(f.path)
     (sz == 0) && error("missing or empty file: $(f.path)")
     (nsplits == 0) && (nsplits = nworkers())
-    splits = Base.splitrange(sz, nsplits)
+    splits = Base.splitrange(int(sz), nsplits)
     data = [(f.path, x) for x in splits]
     Block(f, data, no_affinity, as_it_is, as_it_is)
 end
