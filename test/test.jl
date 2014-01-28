@@ -1,6 +1,6 @@
 using Blocks
 
-const datafile = "test.csv"
+const datafile = joinpath(dirname(@__FILE__), "test.csv")
 const nloops = 10
 
 function testfn(f::Function, s::String, exp_res)
