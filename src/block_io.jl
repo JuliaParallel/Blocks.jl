@@ -24,7 +24,7 @@ immutable BlockIO <: IO
         seekend(s)
         ep = position(s)
 
-        r = min(r.start,ep+1):min(r.start+r.len-1,ep)
+        r = min(r.start,ep+1):min(r.start+length(r)-1,ep)
         bio = new(s, r, length(r))
         if(nothing != match_ends)
             p1 = find_start_pos(bio, match_ends)

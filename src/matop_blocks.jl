@@ -7,6 +7,11 @@ import Base.*
 
 export MatOpBlock, Block, op, *
 
+# Julia 0.2 compatibility patch
+if isless(Base.VERSION, v"0.3.0-")
+    put!(x,y) = put(x,y)
+end
+
 # Blocked operations on matrices
 type MatOpBlock
     m1::Matrix
@@ -24,8 +29,8 @@ type MatOpBlock
         (blks, affs) = (oper == :*) ? matop_block_mul(m1, m2, np) : error("operation $oper not supported")
         r1 = RemoteRef()
         r2 = RemoteRef()
-        put(r1, m1)
-        put(r2, m2)
+        put!(r1, m1)
+        put!(r2, m2)
         new(m1, m2, oper, blks, affs, r1, r2, Dict())
     end
 end
