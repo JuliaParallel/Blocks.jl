@@ -495,7 +495,7 @@ function ==(a::DDataFrame, b::DDataFrame)
     all(pmap((x,y)->isequal(fetch(x),fetch(y)), Block(a), Block(b)))
 end
 # Julia 0.2 Compatibility
-isequal = ==
+isequal(a::DDataFrame, b::DDataFrame) = ==(a::DDataFrame, b::DDataFrame)
 
 nrow(dt::DDataFrame) = sum(dt.nrows)
 ncol(dt::DDataFrame) = dt.ncols
