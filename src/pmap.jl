@@ -10,7 +10,7 @@ function block_pmap(f, lsts...; err_retry=true, err_stop=false, fetch_results=tr
         notify(retrycond)
     end
 
-    retryqueue = {}
+    retryqueue = Any[]
     function retry(idx,v,ex)
         push!(retryqueue, (idx,v,ex))
         notify(retrycond)

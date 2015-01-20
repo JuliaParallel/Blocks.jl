@@ -11,10 +11,11 @@ It represents a typical pattern observed across several types of parallel proces
 As examples of its utility, it has been used to implement chunked and distributed operations on disk files, HDFS files, IO streams, arrays, matrices, and dataframes. Some of them are included in the Blocks module while the rest are available as sub modules of Blocks:
 - Blocks.MatOp
 
-[![Build Status](https://travis-ci.org/tanmaykm/Blocks.jl.png)](https://travis-ci.org/tanmaykm/Blocks.jl)
+[![Build Status](https://travis-ci.org/JuliaParallel/Blocks.jl.png)](https://travis-ci.org/JuliaParallel/Blocks.jl)
 
 ### Creating Blocks
 #### Disk Files
+
 ````
 using Blocks
 
@@ -26,6 +27,7 @@ Block(file::File, nblocks::Int=0)
 ````
 
 #### HDFS Files
+
 ````
 using Blocks
 using HDFS
@@ -36,6 +38,7 @@ Block(file::HdfsURL)
 ````
 
 #### Arrays:
+
 ````
 using Blocks
 
@@ -49,6 +52,7 @@ Block(A::Array, dim::Int, nblocks::Int)
 ````
 
 #### Matrix Operations
+
 Parallelized operations on matrices can be represented and executed using Blocks. Module `Blocks.MatOp` provides a set of convenience APIs using the `MatOpBlock` object.
 
 ````
@@ -95,6 +99,7 @@ true
 ````
 
 #### Streams:
+
 ````
 using Blocks
 
@@ -108,6 +113,7 @@ Block(stream::Union(IOStream,AsyncStream,IOBuffer,BlockIO), approxsize::Int, dlm
 ````
 
 #### Distributed DataFrames:
+
 Blocks introduces a distributed `DataFrame` type named `DDataFrame`. It holds referenced to multiple remote data frames, on multiple processors. A large table can be read in parallel into a DDataFrame by using the special `dreadtable` method. 
 
 ````
@@ -155,13 +161,17 @@ true
 ````
 
 ### Composing Actions on Blocks
+
 Functions can be chained and then applied on to chunks in a block with a `pmap` or `pmapreduce`. The Julia notation `|>` is used to indicate chaining. For example to read a block of DataFrame from a chunk of a disk file:
+
 ````
 b = Block(File(filename)) |> as_io |> as_recordio |> as_dataframe
 ````
+
 Each function in the chain works on the output of the previous function. 
 
 Sometimes it is necessary to separate some of the actions that must be applied locally and serially (e.g. reading from an IO stream), from the remaining that can be distributed to remote processors (e.g. creating a dataframe out of the data chunk). Such actions can be chained by prepending the chain of functions with a `@prepare` macro. 
+
 ````
 b = Block(File(filename))
 b = @prepare b |> as_io |> as_recordio |> as_bytearray
@@ -178,6 +188,7 @@ Following is a list of functions provided in the package. User specified functio
 
 
 ### Map and Reduces on Blocks
+
 Regular Julia map-reduce methods can be used on blocks. The map methods receive the chunks as they have been processed by the chain of actions composed into the Blocks.
 
 ````
@@ -219,11 +230,8 @@ julia> mapreduce(x->sum(x), +, ba)
 ````
 
 
-### Sample Use Cases
-#### Sorting Disk Files
-TODO
-#### Distributed DataFrame from streaming data
-TODO
-#### Continuous summarization of streaming data using DataFrames
-TODO
+### Sample Use Cases (TODO)
+- Sorting Disk Files
+- Distributed DataFrame from streaming data
+- Continuous summarization of streaming data using DataFrames
 
