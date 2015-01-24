@@ -1,6 +1,7 @@
 module Blocks
 
 using Base.FS
+using Compat
 
 importall   Base
 import      Base.peek, Base.throwto, Base.AsyncStream, Base.localpart

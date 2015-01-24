@@ -113,8 +113,8 @@ function block_mul(mb::MatOpBlock)
     m1size = size(m1)
     m2size = size(m2)
 
-    blklist = {}
-    afflist = {}
+    blklist = Any[]
+    afflist = Any[]
     proclist = workers()
     # distribute by splits on m1
     for idx1 in 1:length(mb.splits1)

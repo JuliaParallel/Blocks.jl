@@ -126,7 +126,7 @@ function localpart(blk::Block, pid)
     blks = collect(blocks(blk))
     (nworkers() == 1) && return blks
 
-    local_blocks = {}
+    local_blocks = Any[]
     affs = collect(affinities(blk))
     if isempty(affs) || isempty(affs[1])
         # pick up only some parts corresponding to pid
@@ -163,7 +163,7 @@ function Block(A::Array, dims::Array=[])
     ndimsA = ndims(A)
     alldims = [1:ndimsA]
 
-    blks = {A}
+    blks = Any[A]
     if dims != alldims
         otherdims = setdiff(alldims, dims)
         idx = fill!(cell(ndimsA), 1)
@@ -200,7 +200,7 @@ function Block(f::File, recurse::Bool=true, nfiles_per_split::Int=0)
     files = String[]
     all_files(f.path, recurse, files)
 
-    data = {}
+    data = Any[]
     (nfiles_per_split == 0) && (nfiles_per_split = iceil(length(files)/nworkers()))
 
     while length(files) > 0
