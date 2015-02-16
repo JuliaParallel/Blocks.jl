@@ -112,7 +112,7 @@ Block(stream::Union(IOStream,AsyncStream,IOBuffer,BlockIO), approxsize::Int, dlm
     Each chunk is  approximately of size `approxsize` and ends with the `dlm` character.
 ````
 
-#### Distributed DataFrames:
+#### Distributed DataFrames (discontinued):
 
 Blocks introduces a distributed `DataFrame` type named `DDataFrame`. It holds referenced to multiple remote data frames, on multiple processors. A large table can be read in parallel into a DDataFrame by using the special `dreadtable` method. 
 
