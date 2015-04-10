@@ -4,7 +4,13 @@ using Base.FS
 using Compat
 
 importall   Base
-import      Base.peek, Base.throwto, Base.AsyncStream, Base.localpart
+import      Base: peek, throwto, AsyncStream
+
+if isless(Base.VERSION, v"0.4.0-")
+import      Base.localpart
+else
+import      Base.|>
+end
 
 export      Block, |>, .>, prepare, @prepare, BlockableIO,
             blocks, affinities, localpart,
