@@ -1,6 +1,7 @@
 module MatOp
 
 using Blocks
+using Compat
 
 importall Blocks
 import Base.*
@@ -50,15 +51,15 @@ function common_factor_around(around::Int, nums::Int...)
 
     factors = Int[]
 
-    n = int(floor(gf/around))+1
+    n = @compat(Int(floor(gf/around)))+1
     while n < gf
-        (0 == (gf%n)) && (push!(factors, int(gf/n)); break)
+        (0 == (gf%n)) && (push!(factors, @compat(round(Int,gf/n))); break)
         n += 1
     end
 
-    n = int(floor(gf/around))
+    n = @compat(Int(floor(gf/around)))
     while n > 0
-        (0 == (gf%n)) && (push!(factors, int(gf/n)); break)
+        (0 == (gf%n)) && (push!(factors, @compat(round(Int,gf/n))); break)
         n -= 1
     end
     (length(factors) == 1) && (return factors[1])
@@ -81,12 +82,12 @@ function matop_block_mul(m1::Matrix, m2::Matrix, np::Int)
     s1 = size(m1)
     s2 = size(m2)
     
-    fc = common_factor_around(int(min(s1[2],s2[1])/np), s1[2], s2[1])
-    f1 = common_factor_around(int(s1[1]/np), s1[1])
-    f2 = common_factor_around(int(s2[2]/np), s2[2])
+    fc = common_factor_around(@compat(round(Int,min(s1[2],s2[1])/np)), s1[2], s2[1])
+    f1 = common_factor_around(@compat(round(Int,s1[1]/np)), s1[1])
+    f2 = common_factor_around(@compat(round(Int,s2[2]/np)), s2[2])
 
-    splits1 = mat_split_ranges(s1, int(s1[1]/f1), int(s1[2]/fc)) # splits1 is f1 x fc blocks
-    splits2 = mat_split_ranges(s2, int(s2[1]/fc), int(s2[2]/f2)) # splits2 is fc x f2 blocks
+    splits1 = mat_split_ranges(s1, @compat(round(Int,s1[1]/f1)), @compat(round(Int,s1[2]/fc))) # splits1 is f1 x fc blocks
+    splits2 = mat_split_ranges(s2, @compat(round(Int,s2[1]/fc)), @compat(round(Int,s2[2]/f2))) # splits2 is fc x f2 blocks
     (tuple(splits1...), tuple(splits2...))
 end
 

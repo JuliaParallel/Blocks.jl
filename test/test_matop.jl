@@ -11,8 +11,8 @@ end
 
 function do_mul()
     println("creating initial data...")
-    a1 = reshape([1:10], 1, 10)
-    a2 = reshape([1:6], 6, 1)
+    a1 = reshape([1:10;], 1, 10)
+    a2 = reshape([1:6;], 6, 1)
     a3 = a2*a1
     a4 = a3'
 
@@ -33,8 +33,8 @@ end
 
 function do_mul_large()
     println("creating initial data...")
-    a1 = reshape([[1:5000],[1:5000]], 1, 10000)
-    a2 = reshape([[1:3000],[1:3000]], 6000, 1)
+    a1 = reshape([[1:5000;],[1:5000;]], 1, 10000)
+    a2 = reshape([[1:3000;],[1:3000;]], 6000, 1)
     a3 = a2*a1
     a4 = a3'
 

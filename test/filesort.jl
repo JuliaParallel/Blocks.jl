@@ -5,12 +5,13 @@
 # > filesort("test.csv", 20)
 
 
-using Block
+using Blocks
+using Compat
 using Base.FS
 
-tmpf(workfile::String) = string(myid())*"_"*string(int(time_ns()))*"_"*workfile
+tmpf(workfile::AbstractString) = string(myid())*"_"*string(@compat(Int(time_ns())))*"_"*workfile
 
-function merge_blocks(workfile::String, inio::Array) 
+function merge_blocks(workfile::AbstractString, inio::Array) 
     (length(inio) == 1) && return inio[1]
     out = tmpf(workfile)
     merge_streams(open(out, "w"), map(x->open(x), inio)...)
@@ -35,10 +36,10 @@ function merge_streams(out::IO, _inio::IO...)
     return
 end
 
-function sort_step_2(workfile::String, block_files::Array, nway::Int=0)
+function sort_step_2(workfile::AbstractString, block_files::Array, nway::Int=0)
     # make pairs of files for pmap
     (0 == nway) && (nway = length(block_files))
-    npairs = int(ceil(length(block_files)/nway))
+    npairs = @compat(Int(ceil(length(block_files)/nway)))
     mb = cell(npairs)
     for idx in 1:npairs
         st = (idx-1)*nway+1
@@ -53,25 +54,26 @@ function sort_step_2(workfile::String, block_files::Array, nway::Int=0)
     block_files
 end
 
-function as_tempfile(lines)
-    fname = tmpf(workfile)
-    io = open(fname, "w")
-    write(io, sort(c))
-    close(io)
-    fname
-end
-
-function sort_step_1(workfile::String, n::Int)
-    b = Blocks(File(workfile), n) |> as_io |> as_recordio |> as_lines |> sort |> as_tempfile
+function sort_step_1(workfile::AbstractString, n::Int)
+    function as_tempfile(lines)
+        fname = tmpf(workfile)
+        open(fname, "w") do io
+            for c in lines
+                write(io, c)
+            end
+        end
+        fname
+    end
+    b = Block(File(workfile), n) |> as_io |> as_recordio |> as_lines |> sort |> as_tempfile
     block_files = pmap(x->x, b)
     println("\tblocks sorted -> $(length(block_files))...")
-    #for fname in block_files
-    #    println("\t$(fname)")
-    #end
+    for fname in block_files
+        println("\t$(fname)")
+    end
     block_files
 end
 
-function filesort(workfile::String, n::Int)
+function filesort(workfile::AbstractString, n::Int)
     block_files = sort_step_1(workfile, n)
     while(length(block_files) > 1)
         block_files = sort_step_2(workfile, block_files)

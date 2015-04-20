@@ -161,7 +161,7 @@ function Block(A::Array, dims::Array=[])
     isempty(dims) && error("no dimensions specified")
     dimsA = [size(A)...]
     ndimsA = ndims(A)
-    alldims = [1:ndimsA]
+    alldims = [1:ndimsA;]
 
     blks = Any[A]
     if dims != alldims
@@ -191,7 +191,7 @@ function Block(f::File, nsplits::Int=0)
     sz = filesize(f.path)
     (sz == 0) && error("missing or empty file: $(f.path)")
     (nsplits == 0) && (nsplits = nworkers())
-    splits = Base.splitrange(int(sz), nsplits)
+    splits = Base.splitrange(@compat(Int(sz)), nsplits)
     data = [(f.path, x) for x in splits]
     Block(f, data, no_affinity, as_it_is, as_it_is)
 end
