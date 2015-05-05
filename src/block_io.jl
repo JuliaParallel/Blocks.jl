@@ -42,9 +42,9 @@ BlockIO(bio::BlockIO, match_ends::Union(Char,Nothing)=nothing) = BlockIO(bio.s, 
 close(bio::BlockIO) = close(bio.s)
 eof(bio::BlockIO) = (position(bio) >= bio.l) 
 read(bio::BlockIO, x::Type{Uint8}) = read(bio.s, x)
-read{T}(bio::BlockIO, a::Array{T}) = (length(a)*sizeof(T) <= nb_available(bio)) ? read(bio.s, a) : throw(EOFError())
+read!{T}(bio::BlockIO, a::Array{T}) = (length(a)*sizeof(T) <= nb_available(bio)) ? read!(bio.s, a) : throw(EOFError())
 
-readbytes(bio::BlockIO, nb::Integer) = bytestring(read(bio, Array(Uint8, nb)))
+readbytes(bio::BlockIO, nb::Integer) = bytestring(read!(bio, Array(Uint8, nb)))
 readall(bio::BlockIO) = readbytes(bio, nb_available(bio))
 
 peek(bio::BlockIO) = peek(bio.s)

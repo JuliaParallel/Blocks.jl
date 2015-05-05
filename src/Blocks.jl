@@ -4,7 +4,7 @@ using Base.FS
 using Compat
 
 importall   Base
-import      Base: peek, throwto, AsyncStream
+import      Base: peek, throwto, AsyncStream, open
 
 if isless(Base.VERSION, v"0.4.0-")
 import      Base.localpart
@@ -14,11 +14,11 @@ end
 
 export      Block, |>, .>, prepare, @prepare, BlockableIO,
             blocks, affinities, localpart,
-            as_it_is, as_io, as_recordio, as_lines, as_bufferedio, as_bytearray,
+            as_it_is, as_io, as_recordio, as_wordio, as_lines, as_bufferedio, as_bytearray,
 
             map, mapreduce, pmap, pmapreduce,
 
-            BlockIO, close, eof, read, write, readbytes, peek,
+            BlockIO, close, eof, read!, write, readbytes, peek,
             readall, flush, nb_available, position, filesize, seek, seekend, seekstart, skip
 
 include("pmap.jl")

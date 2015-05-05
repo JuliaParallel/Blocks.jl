@@ -66,6 +66,8 @@ function as_recordio(x::Tuple)
     end
 end
 
+as_wordio(x::BlockIO, dlm::Char=' ') = BlockIO(x, dlm)
+
 |>(b::Block, f::Function) = filter(f, b)
 function filter(f::Function, b::Block)
     let oldf = b.filter
