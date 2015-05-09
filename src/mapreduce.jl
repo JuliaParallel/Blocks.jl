@@ -34,7 +34,7 @@ function pmap(m, bf::Block...; kwargs...)
 
     afflist = [intersect([affs[x][j] for x in 1:n]...) for j in 1:n1]
 
-    # check if atleast one common processor for each block
+    # check if at least one common processor for each block
     for idx in 1:n1
         isempty(afflist[idx]) && error("no common processor for block $(idx)")
     end
@@ -47,11 +47,11 @@ function pmap(m, bf::Block...; kwargs...)
     # in this case it's just an index.
     nextidx(p) = begin
         for (idx,a) in enumerate(afflist)
-            if !donelist[idx] && (p in a) 
+            if !donelist[idx] && (p in a)
                 donelist[idx] = true
                 return idx
             end
-        end 
+        end
         0
     end
 
@@ -81,7 +81,7 @@ end
 
 
 pmapreduce(m, r, bf::Block...) = reduce(r, pmap(m, bf...))
-function pmapreduce(m, r, v0, bf::Block...) 
+function pmapreduce(m, r, v0, bf::Block...)
     results = pmap(m, bf...)
     ret = v0
     for res in results

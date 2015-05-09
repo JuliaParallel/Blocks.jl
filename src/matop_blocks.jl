@@ -81,7 +81,7 @@ end
 function matop_block_mul(m1::Matrix, m2::Matrix, np::Int)
     s1 = size(m1)
     s2 = size(m2)
-    
+
     fc = common_factor_around(@compat(round(Int,min(s1[2],s2[1])/np)), s1[2], s2[1])
     f1 = common_factor_around(@compat(round(Int,s1[1]/np)), s1[1])
     f2 = common_factor_around(@compat(round(Int,s2[2]/np)), s2[2])

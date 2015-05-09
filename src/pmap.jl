@@ -1,4 +1,3 @@
-
 function block_pmap(f, lsts...; err_retry=true, err_stop=false, fetch_results=true)
     len = length(lsts)
     np = nprocs()
@@ -34,7 +33,7 @@ function block_pmap(f, lsts...; err_retry=true, err_stop=false, fetch_results=tr
                 map(idx->states[idx]=nxts[idx][2], 1:len)
                 nxtvals = [x[1] for x in nxts]
                 produce((getnextidx(), nxtvals))
-            elseif (length(results) == getcurridx()) || (is_task_in_error() && err_stop)     
+            elseif (length(results) == getcurridx()) || (is_task_in_error() && err_stop)
                 break
             else
                 wait(retrycond)
@@ -65,7 +64,7 @@ function block_pmap(f, lsts...; err_retry=true, err_stop=false, fetch_results=tr
                         catch ex
                             err_retry ? retry(idx,nxtvals,ex) : setresult(idx, ex)
                             set_task_in_error()
-                            break # remove this worker from accepting any more tasks 
+                            break # remove this worker from accepting any more tasks
                         end
                     end
                 end

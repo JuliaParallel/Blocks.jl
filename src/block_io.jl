@@ -2,7 +2,7 @@
 # give a stream view to a block from any seekable iostream
 immutable BlockIO <: IO
     s::IO
-    r::Range1
+    r::UnitRange
     l::Int
 
     function find_end_pos(bio::BlockIO, end_byte::Char)
@@ -19,7 +19,7 @@ immutable BlockIO <: IO
         position(bio.s)+1
     end
 
-    function BlockIO(s::IO, r::Range1, match_ends::Union(Char,Nothing)=nothing)
+    function BlockIO(s::IO, r::UnitRange, match_ends::Union(Char,Nothing)=nothing)
         # TODO: use mark when available
         seekend(s)
         ep = position(s)
@@ -40,7 +40,7 @@ end
 BlockIO(bio::BlockIO, match_ends::Union(Char,Nothing)=nothing) = BlockIO(bio.s, bio.r, match_ends)
 
 close(bio::BlockIO) = close(bio.s)
-eof(bio::BlockIO) = (position(bio) >= bio.l) 
+eof(bio::BlockIO) = (position(bio) >= bio.l)
 read(bio::BlockIO, x::Type{Uint8}) = read(bio.s, x)
 read{T}(bio::BlockIO, a::Array{T}) = (length(a)*sizeof(T) <= nb_available(bio)) ? read(bio.s, a) : throw(EOFError())
 

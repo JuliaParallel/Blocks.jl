@@ -1,6 +1,6 @@
 typealias BlockableIO Union(IOStream,AsyncStream,IOBuffer,BlockIO)
 
-type Block{T} 
+type Block{T}
     source::T
     block::Array            # chunk definition
     affinity::Array         # chunk affinity
@@ -18,7 +18,7 @@ as_it_is(x) = x
 
 as_io(x) = open(x)
 as_io(f::File) = open(f.path)
-function as_io(x::Tuple) 
+function as_io(x::Tuple)
     if isa(x[1], AsyncStream)
         aio = x[1]
         maxsize = x[2]
@@ -28,8 +28,8 @@ function as_io(x::Tuple)
         return PipeBuffer(read(aio, Array(Uint8,avlb)))
     elseif isa(x[1], BlockableIO)
         io = x[1]
-        # using BlockIO to avoid copy. 
-        # but since BlockIO would skip till the first record delimiter, 
+        # using BlockIO to avoid copy.
+        # but since BlockIO would skip till the first record delimiter,
         # we must present it the last read byte (which must be the last read delimiter)
         # therefore we pass the last read position as the start position for BlockIO
         pos = position(io)
@@ -40,7 +40,7 @@ function as_io(x::Tuple)
         return BlockIO(open(x[1]), x[2])
     end
 end
-function as_bufferedio(x::BlockableIO) 
+function as_bufferedio(x::BlockableIO)
     buff = read(x, Array(Uint8, nb_available(x)))
     close(x)
     IOBuffer(buff)
