@@ -82,6 +82,6 @@ function filesort(workfile::AbstractString, n::Int)
 end
 
 if length(ARGS) > 0
-    prinln(ARGS)
+    println(ARGS)
 end
 
