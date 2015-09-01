@@ -178,11 +178,18 @@ function Block(A::Array, dims::Array=[])
         numblocks = *(itershape...)
         blks = cell(numblocks)
         blkid = 1
-        cartesianmap(itershape) do idxs...
-            ia = [idxs...]
-            idx[otherdims] = ia
-            blks[blkid] = reshape(A[idx...], Asliceshape)
-            blkid += 1
+        if VERSION >= v"0.4.0-dev+3184"
+            for idxs in CartesianRange(itershape)
+                idx[otherdims] = [idxs[i] for i in 1:length(idxs)]
+                blks[blkid] = reshape(A[idx...], Asliceshape)
+                blkid += 1
+            end
+        else
+            cartesianmap(itershape) do idxs...
+                idx[otherdims] = [idxs...]
+                blks[blkid] = reshape(A[idx...], Asliceshape)
+                blkid += 1
+            end
         end
     end
     Block(A, blks, no_affinity, as_it_is, as_it_is)
