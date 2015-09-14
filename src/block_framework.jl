@@ -94,26 +94,45 @@ end
 
 ##
 # Iterators for blocks and affinities
+# There are separate iterators for data and its affinity, because affinity is sometimes common to all chunks.
+# But both can be iterated upon together by zip(blocks(b), affinities(b)).
 abstract BlockIterator{T}
+
 type BlockAffinityIterator{T} <: BlockIterator{T}
     b::Block{T}
 end
+
 type BlockDataIterator{T} <: BlockIterator{T}
     b::Block{T}
 end
+
 start{T<:BlockIterator}(bi::T) = 1
-done{T<:BlockIterator}(bi::T,status) = (0 == status)
-function next{T<:BlockableIO}(bi::BlockIterator{T},status)
+done{T<:BlockIterator}(bi::T, status) = (0 == status)
+
+function next{T<:BlockableIO}(bi::BlockAffinityIterator{T}, status)
     blk = bi.b
-    data = isa(bi, BlockAffinityIterator) ? blk.affinity : blk.prepare(blk.block[1])
+    data = blk.affinity
     status = eof(blk.source) ? 0 : (status+1)
-    (data,status)
+    (data, status)
 end
-function next{T<:Any}(bi::BlockIterator{T},status)
+function next{T<:Any}(bi::BlockAffinityIterator{T}, status)
     blk = bi.b
-    data = isa(bi, BlockAffinityIterator) ? (isempty(blk.affinity) ? blk.affinity : blk.affinity[status]) : blk.prepare(blk.block[status])
+    data = isempty(blk.affinity) ? blk.affinity : blk.affinity[status]
     status = (status >= length(blk.block)) ? 0 : (status+1)
-    (data,status)
+    (data, status)
+end
+
+function next{T<:BlockableIO}(bi::BlockDataIterator{T}, status)
+    blk = bi.b
+    data = blk.prepare(blk.block[1])
+    status = eof(blk.source) ? 0 : (status+1)
+    (data, status)
+end
+function next{T<:Any}(bi::BlockDataIterator{T}, status)
+    blk = bi.b
+    data = blk.prepare(blk.block[status])
+    status = (status >= length(blk.block)) ? 0 : (status+1)
+    (data, status)
 end
 
 blocks(b::Block) = BlockDataIterator(b)

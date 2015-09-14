@@ -1,9 +1,9 @@
 Blocks
 ======
 A framework to:
-- represent chunks of entities
-- represent processor affinities of the chunks
-- compose actions on chunks by chaining functions 
+- represent chunks of an entity
+- represent processor affinities of the chunks (if any)
+- compose actions (both local and remote) on chunks by chaining functions
 - do map and reduce operations with the above
 
 It represents a typical pattern observed across several types of parallel processing tasks. The Blocks framework can be leveraged to build convenience APIs for parallelizing such tasks. The composability of Blocks lends to a convenient and compact syntax.
@@ -60,43 +60,37 @@ julia> using Blocks
 
 julia> using Blocks.MatOp
 
-julia> 
-
 julia> # create two matrices
 
 julia> m1 = rand(Int, 6, 10);
 
 julia> m2 = rand(Int, 10, 6);
 
-julia> 
-
 julia> # create a parallel matrix operation using the two, multiplication in this case
 
 julia> mb = MatOpBlock(m1, m2, :*, 3);
-
-julia> 
 
 julia> # represent that in blocks
 
 julia> blk = Block(mb);
 
-julia> 
-
 julia> # execute the operation
 
 julia> result = op(blk);
-
-julia> 
 
 julia> # verify the result
 
 julia> tr = m1*m2;
 
-julia> 
-
 julia> all(tr .== result)
 true
 ````
+
+`Blocks.MatOp` can be made to work on any `AbstractMatrix` implementation, as long as there is:
+
+- a function `Blocks(A, splits)`, where `A` is the matrix and `splits` is a `Tuple` of ranges (as returned from `mat_split_ranges`)
+- a function `matrixpart(blk)`, which returns a chunk of `A` that the block `blk` represents
+
 
 #### Streams:
 
@@ -229,6 +223,22 @@ julia> mapreduce(x->sum(x), +, ba)
 5050
 ````
 
+### Defining Blocks for a new type
+
+It is easy to define Blocks for a new type. The minimum requirement is just the constructor: `Block(data::T,...)`.
+In the `Block{T}` structure returned,
+- elements of `block` define a chunk of `T` with enough information that can be serialized to a remote node and recreated
+- elements of `affinity` define one or more processors where the corresponding element of `block` can be accessed
+- the `prepare` function pre-processes `block` elements on the master node, before they are serialized to the remote node
+- the `filter` function processes `block` elements on the remote node
+
+Both `prepare` and `filter` functions can be chained after construction.
+
+In addition to that, you may also override the default implementations of the following:
+
+- `blocks{T}(b::Block{T})`: return an iterator over the chunk definitions
+- `affinities{T}(b::Block{T})`: return an iterator over the chunk affinities
+- `localpart(blk::Block)`: return only the blocks that are local to the current processor
 
 ### Sample Use Cases (TODO)
 - Sorting Disk Files
