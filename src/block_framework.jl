@@ -1,4 +1,4 @@
-typealias BlockableIO Union(IOStream,AsyncStream,IOBuffer,BlockIO)
+typealias BlockableIO Union{IOStream,LibuvStream,IOBuffer,BlockIO}
 
 type Block{T}
     source::T
@@ -19,18 +19,18 @@ as_it_is(x) = x
 as_io(x) = open(x)
 as_io(f::File) = open(f.path)
 function as_io(x::Tuple)
-    if isa(x[1], AsyncStream)
+    if isa(x[1], LibuvStream)
         aio = x[1]
         maxsize = x[2]
         start_reading(aio)
         Base.wait_readnb(aio, maxsize)
         avlb = min(nb_available(aio.buffer), maxsize)
-        return PipeBuffer(read(aio, Array(Uint8,avlb)))
+        return PipeBuffer(read(aio, Array(UInt8,avlb)))
     elseif isa(x[1], BlockableIO)
         io = x[1]
         # using BlockIO to avoid copy.
         # but since BlockIO would skip till the first record delimiter,
-        # we must present it the last read byte (which must be the last read delimiter)
+        # we must present to it the last read byte (which must be the last read delimiter)
         # therefore we pass the last read position as the start position for BlockIO
         pos = position(io)
         endpos = pos+x[2]
@@ -41,24 +41,24 @@ function as_io(x::Tuple)
     end
 end
 function as_bufferedio(x::BlockableIO)
-    buff = read(x, Array(Uint8, nb_available(x)))
+    buff = read(x, Array(UInt8, nb_available(x)))
     close(x)
     IOBuffer(buff)
 end
 as_lines(x::BlockableIO) = readlines(x)
-as_bytearray(x::BlockableIO) = read(x, Array(Uint8, nb_available(x)))
+as_bytearray(x::BlockableIO) = read(x, Array(UInt8, nb_available(x)))
 
 as_recordio(x::BlockIO, dlm::Char='\n') = BlockIO(x, dlm)
 function as_recordio(x::Tuple)
     dlm = (length(x) == 3) ? x[3] : '\n'
-    if isa(x[1], AsyncStream)
+    if isa(x[1], LibuvStream)
         aio = x[1]
         minsize = x[2]
         start_reading(aio)
         Base.wait_readnb(aio, minsize)
         tot_avlb = nb_available(aio.buffer)
         avlb = min(tot_avlb, minsize)
-        pb = PipeBuffer(read(aio, Array(Uint8,avlb)))
+        pb = PipeBuffer(read(aio, Array(UInt8,avlb)))
         write(pb, readuntil(aio, dlm))
         return pb
     else
@@ -76,7 +76,6 @@ function filter(f::Function, b::Block)
     end
 end
 
-.>(b::Block, f::Function) = prepare(b, f)
 function prepare(b::Block, f::Function)
     let oldf = b.prepare
         b.prepare = (x)->f(oldf(x))
@@ -206,7 +205,7 @@ function Block(f::File, nsplits::Int=0)
 end
 
 function Block(f::File, recurse::Bool=true, nfiles_per_split::Int=0)
-    files = String[]
+    files = AbstractString[]
     all_files(f.path, recurse, files)
 
     data = Any[]
@@ -229,7 +228,7 @@ Block{T<:BlockableIO}(aio::T, approxsize::Int, dlm::Char) = Block(aio, [(aio,app
 
 ##
 # utility methods
-function all_files(path::String, recurse::Bool, list::Array)
+function all_files(path::AbstractString, recurse::Bool, list::Array)
     files = readdir(path)
 
     for file in files
