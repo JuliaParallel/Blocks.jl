@@ -97,7 +97,7 @@ function as_dataframe(bio::BlockableIO; kwargs...)
     end
     po = DataFrames.ParseOptions(poargs...)
 
-    p = DataFrames.ParsedCSV(Array(Uint8, nbytes), Array(Int, 1), Array(Int, 1), BitArray(1))
+    p = DataFrames.ParsedCSV(Array(UInt8, nbytes), Array(Int, 1), Array(Int, 1), BitArray(1))
 
     tbl = DataFrames.readtable!(p, bio, nbytes, po)
     tbl
@@ -132,9 +132,10 @@ function dreadtable(b::Block; kwargs...)
     procs = map(x->x.where, rrefs)
     DDataFrame(rrefs, procs)
 end
-dreadtable(fname::String; kwargs...) = dreadtable(Block(File(fname)) |> as_io |> as_recordio; kwargs...)
-function dreadtable(io::Union(AsyncStream,IOStream), chunk_sz::Int, merge_chunks::Bool=true; kwargs...)
-    b = (Block(io, chunk_sz, '\n') .> as_recordio) .> as_bytearray
+dreadtable(fname::AbstractString; kwargs...) = dreadtable(Block(File(fname)) |> as_io |> as_recordio; kwargs...)
+function dreadtable(io::Union{IO,IOStream}, chunk_sz::Int, merge_chunks::Bool=true; kwargs...)
+    b = Block(io, chunk_sz, '\n')
+    b = @prepare b |> as_recordio |> as_bytearray
     rrefs = pmap(x->as_dataframe(PipeBuffer(x); kwargs...), b; fetch_results=false)
     procs = map(x->x.where, rrefs)
 
@@ -312,7 +313,7 @@ function describe(io, dt::DDataFrame)
     nrows = nrow(dt)
     cnames = colnames(dt)
     ctypes = coltypes(dt)
-    qcolnames = String[]
+    qcolnames = AbstractString[]
     for idx in 1:length(cnames)
         ((ctypes[idx] <: Number)) && push!(qcolnames, cnames[idx])
     end
@@ -433,11 +434,11 @@ end
 
 for f in DataFrames.binary_operators
     @eval begin
-        function ($f)(dt::DDataFrame, x::Union(Number, NAtype))
+        function ($f)(dt::DDataFrame, x::Union{Number, NAtype})
             rrefs = pmap(y->($f)(fetch(y),x), Block(dt); fetch_results=false)
             DDataFrame(rrefs, dt.procs)
         end
-        function ($f)(x::Union(Number, NAtype), dt::DDataFrame)
+        function ($f)(x::Union{Number, NAtype}, dt::DDataFrame)
             rrefs = pmap(y->($f)(x,fetch(y)), Block(dt); fetch_results=false)
             DDataFrame(rrefs, dt.procs)
         end
@@ -445,7 +446,7 @@ for f in DataFrames.binary_operators
 end
 
 for (f,_) in DataFrames.vectorized_comparison_operators
-    for t in [:Number, :String, :NAtype]
+    for t in [:Number, :AbstractString, :NAtype]
         @eval begin
             function ($f){T <: ($t)}(dt::DDataFrame, x::T)
                 rrefs = pmap(y->($f)(fetch(y),x), Block(dt); fetch_results=false)
@@ -589,9 +590,9 @@ function by(dt::DDataFrame, cols, f, reducer::Function)
 end
 
 
-dwritetable(path::String, suffix::String, dt::DDataFrame; kwargs...) = pmap(x->begin; fn=joinpath(path, string(myid())*"."*suffix); writetable(fn, fetch(x); kwargs...); fn; end, Block(dt))
+dwritetable(path::AbstractString, suffix::AbstractString, dt::DDataFrame; kwargs...) = pmap(x->begin; fn=joinpath(path, string(myid())*"."*suffix); writetable(fn, fetch(x); kwargs...); fn; end, Block(dt))
 
-function writetable(filename::String, dt::DDataFrame, do_gather::Bool=false; kwargs...)
+function writetable(filename::AbstractString, dt::DDataFrame, do_gather::Bool=false; kwargs...)
     do_gather && (return writetable(filename, gather(dt); kwargs...))
 
     hdr = (:header,true)
@@ -613,12 +614,12 @@ function writetable(filename::String, dt::DDataFrame, do_gather::Bool=false; kwa
     f = open(filename, hdr[2] ? "a" : "w")
 
     const lb = 1024*16
-    buff = Array(Uint8, lb)
+    buff = Array(UInt8, lb)
     for fn in filenames
         fp = open(fn)
         while(!eof(fp))
             avlb = nb_available(fp)
-            write(f, read(fp, (avlb < lb) ? Array(Uint8, avlb) : buff))
+            write(f, read(fp, (avlb < lb) ? Array(UInt8, avlb) : buff))
         end
         close(fp)
         rm(fn)

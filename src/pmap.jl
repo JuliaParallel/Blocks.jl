@@ -82,7 +82,7 @@ end
 ##
 # generic map on any iterator
 #
-#function map(f::Union(Function,DataType), iters...)
+#function map(f::Union{Function,DataType}, iters...)
 #    result = {}
 #    len = length(iters)
 #    states = [start(iters[idx]) for idx in 1:len]

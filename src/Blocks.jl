@@ -4,15 +4,19 @@ using Base.FS
 using Compat
 
 importall   Base
-import      Base: peek, throwto, AsyncStream, open
+import      Base: peek, throwto, open
 
 if isless(Base.VERSION, v"0.4.0-")
-import      Base.localpart
+import      Base: AsyncStream, localpart
+typealias LibuvStream AsyncStream
+elseif isless(Base.VERSION, v"0.5.0-")
+import      Base: AsyncStream, |>
+typealias LibuvStream AsyncStream
 else
-import      Base.|>
+import      Base: LibuvStream, |>
 end
 
-export      Block, |>, .>, prepare, @prepare, BlockableIO,
+export      Block, |>, prepare, @prepare, BlockableIO,
             blocks, affinities, localpart,
             as_it_is, as_io, as_recordio, as_wordio, as_lines, as_bufferedio, as_bytearray,
 

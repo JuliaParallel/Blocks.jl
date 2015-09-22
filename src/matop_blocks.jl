@@ -4,35 +4,150 @@ using Blocks
 using Compat
 
 importall Blocks
-import Base.*
+importall Base
 
-export MatOpBlock, Block, op, *
+export MatOpBlock, Block, RandomMatrix, op, convert, *
 
-# Julia 0.2 compatibility patch
-if isless(Base.VERSION, v"0.3.0-")
-    put!(x,y) = put(x,y)
+##
+# RamdomMatrix: A way to represent distributed memory random matrix that is easier to work with blocks
+# Actually just a placeholder for eltype, dims and rng seeds, with a few AbstractMatrix methods defined on it
+type RandomMatrix{T} <: AbstractMatrix{T}
+    t::Type{T}
+    dims::NTuple{2,Int}
+    seed::Int
+end
+eltype{T}(m::RandomMatrix{T}) = T
+size(m::RandomMatrix) = m.dims
+
+##
+# MatrixSplits hold remote refs of parts of the matrix, along with the matrix definition
+type MatrixSplits
+    m::AbstractMatrix
+    splitrefs::Dict
+end
+
+
+##
+# Block definition on DenseMatrix.
+# Each part contains the part dimensions.
+# Parts are fetched from master node on first use, and their resusable references are stored at master node.
+# This is not a terribly useful type, just used as an example implementation.
+type DenseMatrixPart
+    r::RemoteRef
+    split::Tuple
+end
+
+function Block(A::DenseMatrix, splits::Tuple)
+    msplits = MatrixSplits(A, Dict())
+    r = RemoteRef()
+    put!(r, msplits)
+    blks = [DenseMatrixPart(r, split) for split in splits]
+    Block(A, blks, Blocks.no_affinity, as_it_is, as_it_is)
+end
+
+##
+# Block definition on RandomMatrix.
+# Each part contains the type, part dimensions, and rng seed.
+# Parts are created locally on first use, and their resusable references are stored at master node
+# This is not a terribly useful type, just used as an example implementation.
+type RandomMatrixPart
+    r::RemoteRef
+    t::Type
+    split::Tuple
+    splitseed::Int
+end
+
+function Block(A::RandomMatrix, splits::Tuple)
+    msplits = MatrixSplits(A, Dict())
+    r = RemoteRef()
+    put!(r, msplits)
+    splitseeds = A.seed + (1:length(splits))
+    blks = [RandomMatrixPart(r, eltype(A), splits[idx], splitseeds[idx]) for idx in 1:length(splits)]
+    Block(A, blks, Blocks.no_affinity, as_it_is, as_it_is)
+end
+
+function matrixpart_get(blk)
+    refpid = blk.r.where # get the pid of the master process
+    # TODO: need a way to avoid unnecessary remotecalls after the initial fetch
+    remotecall_fetch(refpid, ()->matrixpart_get(blk, myid()))
+end
+
+function matrixpart_get(blk, pid)
+    msplits = fetch(blk.r)
+    splitrefs = msplits.splitrefs
+    key = (pid, blk.split)
+    get(splitrefs, key, nothing)
+end
+
+function matrixpart_set(blk, part_ref)
+    refpid = blk.r.where # get the pid of the master process
+    remotecall_wait(refpid, ()->matrixpart_set(blk, myid(), part_ref))
+end
+
+function matrixpart_set(blk, pid, part_ref)
+    msplits = fetch(blk.r)
+    splitrefs = msplits.splitrefs
+    key = (pid, blk.split)
+    splitrefs[key] = part_ref
+    nothing
+end
+
+function matrixpart(blk)
+    # check at the master process if we already have this chunk, and get its ref
+    chunk_ref = matrixpart_get(blk)
+    (chunk_ref === nothing) || (return fetch(chunk_ref))
+
+    # create the chunk
+    part = matrixpart_create(blk)
+    part_ref = RemoteRef()
+    put!(part_ref, part)
+    # update its reference
+    matrixpart_set(blk, part_ref)
+    # return the chunk
+    part
+end
+
+function matrixpart_create(blk::RandomMatrixPart)
+    part_size = map(length, blk.split)
+    srand(blk.splitseed)
+    rand(blk.t, part_size...)
+end
+
+function matrixpart_create(blk::DenseMatrixPart)
+    splits = fetch(blk.r)
+    A = splits.m
+    part_range = blk.split
+    A[part_range...]
+end
+
+function convert(::Type{DenseMatrix}, r::Block{RandomMatrix})
+    A = r.source
+    ret = zeros(eltype(A), size(A))
+    for blk in blocks(r)
+        part_range = blk.split
+        ret[part_range...] = matrixpart_create(blk)
+    end
+    ret
 end
 
 # Blocked operations on matrices
 type MatOpBlock
-    m1::Matrix
-    m2::Matrix
+    mb1::Block
+    mb2::Block
     oper::Symbol
-    splits1::Tuple
-    splits2::Tuple
-    r1::RemoteRef
-    r2::RemoteRef
-    splitrefs::Dict
 
-    function MatOpBlock(m1::Matrix, m2::Matrix, oper::Symbol, np::Int=0)
+    function MatOpBlock(m1::AbstractMatrix, m2::AbstractMatrix, oper::Symbol, np::Int=0)
+        s1 = size(m1)
+        s2 = size(m2)
+
         (0 == np) && (np = nprocs())
-        np = min(size(m1)..., size(m2)..., np)
-        (blks, affs) = (oper == :*) ? matop_block_mul(m1, m2, np) : error("operation $oper not supported")
-        r1 = RemoteRef()
-        r2 = RemoteRef()
-        put!(r1, m1)
-        put!(r2, m2)
-        new(m1, m2, oper, blks, affs, r1, r2, Dict())
+        np = min(s1..., s2..., np)
+
+        (splits1, splits2) = (oper == :*) ? matop_block_mul(s1, s2, np) : error("operation $oper not supported")
+
+        mb1 = Block(m1, splits1)
+        mb2 = Block(m2, splits2)
+        new(mb1, mb2, oper)
     end
 end
 
@@ -78,10 +193,12 @@ function mat_split_ranges(dims::Tuple, nrsplits::Int, ncsplits::Int)
     splits
 end
 
-function matop_block_mul(m1::Matrix, m2::Matrix, np::Int)
-    s1 = size(m1)
-    s2 = size(m2)
-
+# Input:
+#   - two matrices (or their dimensions)
+#   - number of processors to split over
+# Output:
+#   - tuples of ranges to split each matrix into, suitable for block multiplication
+function matop_block_mul(s1::Tuple, s2::Tuple, np::Int)
     fc = common_factor_around(@compat(round(Int,min(s1[2],s2[1])/np)), s1[2], s2[1])
     f1 = common_factor_around(@compat(round(Int,s1[1]/np)), s1[1])
     f2 = common_factor_around(@compat(round(Int,s2[2]/np)), s2[2])
@@ -91,68 +208,40 @@ function matop_block_mul(m1::Matrix, m2::Matrix, np::Int)
     (tuple(splits1...), tuple(splits2...))
 end
 
-as_mat_splits(mb::MatOpBlock, t::Tuple) = (t[1], mb.m1[t[2]...], mb.m2[t[3]...])
-function as_remote_splits(mb::MatOpBlock, t::Tuple)
-    r1 = mb.r1
-    r2 = mb.r2
-    m1range = t[2]
-    m2range = t[3]
-    aff = t[4]
-    src_proc = myid()
-    #println("as remote split processor $aff m1$m1range m2$m2range")
-    k1 = (aff, 1, m1range)
-    !haskey(mb.splitrefs, k1) && (mb.splitrefs[k1] = remotecall_wait(aff, ()->remotecall_fetch(src_proc, ()->fetch(r1)[m1range...])))
-    k2 = (aff, 2, m2range)
-    !haskey(mb.splitrefs, k2) && (mb.splitrefs[k2] = remotecall_wait(aff, ()->remotecall_fetch(src_proc, ()->fetch(r2)[m2range...])))
-    #println("as remote split processor $aff $(mb.splitrefs[k1]) $(mb.splitrefs[k2])")
-    (t[1], mb.splitrefs[k1], mb.splitrefs[k2])
-end
-
 function block_mul(mb::MatOpBlock)
-    m1 = mb.m1
-    m2 = mb.m2
-    m1size = size(m1)
-    m2size = size(m2)
-
     blklist = Any[]
     afflist = Any[]
     proclist = workers()
     # distribute by splits on m1
-    for idx1 in 1:length(mb.splits1)
-        split1 = mb.splits1[idx1]
+    for blk1 in blocks(mb.mb1)
+        split1 = blk1.split
         proc = shift!(proclist)
         push!(proclist, proc)
-        for idx2 in 1:length(mb.splits2)
-            split2 = mb.splits2[idx2]
+        for blk2 in blocks(mb.mb2)
+            split2 = blk2.split
             (split1[2] != split2[1]) && continue
-            resranges = (split1[1], split2[2])
-            #println("m1$split1 x m2$split2 = res$resranges")
-            # TODO: need more tricks to send a block only once to a node
-            #push!(blklist, (resranges, m1[split1...], m2[split2...]))
-            push!(blklist, (resranges, split1, split2, proc))
+            result_range = (split1[1], split2[2])
+            push!(blklist, (result_range, blk1, blk2, proc))
             # set affinities of all blocks each split of m1 needs to same processor
             push!(afflist, proc)
         end
     end
 
-    #Block(mb, blklist, afflist, as_it_is, (t)->as_mat_splits(mb, t))
-    Block(mb, blklist, afflist, as_it_is, (t)->as_remote_splits(mb, t))
+    Block(mb, blklist, afflist, as_it_is, as_it_is)
 end
 
 ##
 # operations
 function *{T<:MatOpBlock}(blk::Block{T})
     mb = blk.source
-    m1 = mb.m1
-    m2 = mb.m2
+    m1 = mb.mb1.source
+    m2 = mb.mb2.source
     m1size = size(m1)
     m2size = size(m2)
-    restype = typeof(m1[1] * m2[1])
+    restype = promote_type(eltype(m1), eltype(m2))
     res = zeros(restype, m1size[1], m2size[2])
 
-    pmapreduce((t)->(t[1], fetch(t[2])*fetch(t[3])), (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
-    #pmapreduce((t)->(t[1], t[2]*t[3]), (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
-    #pmapreduce((t)->begin println("on $(myid()) res$(t[1])"); (t[1], t[2]*t[3]); end, (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
+    pmapreduce((t)->(t[1], matrixpart(t[2])*matrixpart(t[3])), (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
     res
 end
 

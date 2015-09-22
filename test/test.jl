@@ -1,9 +1,10 @@
 using Blocks
+using Compat
 
 const datafile = joinpath(dirname(@__FILE__), "test.csv")
 const nloops = 10
 
-function testfn(f::Function, s::String, exp_res)
+function testfn(f::Function, s::AbstractString, exp_res)
     println("\t$(s)...")
     ret = f()
     println("\t\tresult: $(ret)")
