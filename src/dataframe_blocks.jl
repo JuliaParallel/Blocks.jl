@@ -41,13 +41,13 @@ gather(dt::DDataFrame) = reduce((x,y)->vcat(fetch(x), fetch(y)), dt.rrefs)
 # internal methods
 function _dims(dt::DDataFrame, rows::Bool=true, cols::Bool=true)
     dt.nrows = pmap(x->nrow(fetch(x)), Block(dt))
-    cnames = remotecall_fetch(dt.procs[1], (x)->colnames(fetch(x)), dt.rrefs[1])
+    cnames = remotecall_fetch((x)->colnames(fetch(x)), dt.procs[1], dt.rrefs[1])
     dt.ncols = length(cnames)
     dt.colindex = Index(cnames)
-    dt.coltypes = remotecall_fetch(dt.procs[1], (x)->coltypes(fetch(x)), dt.rrefs[1])
+    dt.coltypes = remotecall_fetch((x)->coltypes(fetch(x)), dt.procs[1], dt.rrefs[1])
     # propagate the column names
     for nidx in 2:length(dt.procs)
-        remotecall(dt.procs[nidx], x->colnames!(fetch(x), cnames), dt.rrefs[nidx])
+        remotecall(x->colnames!(fetch(x), cnames), dt.procs[nidx], dt.rrefs[nidx])
     end
     dt
 end
@@ -404,7 +404,7 @@ function deleterows!(dt::DDataFrame, keep_inds::Vector{Int})
     for idx in 1:length(dt.nrows)
         end_row = dt.nrows[idx]
         part_rows = filter(x->(beg_row <= x <= (beg_row+end_row-1)), keep_inds) .- (beg_row-1)
-        push!(split_inds, remotecall_wait(dt.procs[idx], DataFrame, part_rows))
+        push!(split_inds, remotecall_wait(DataFrame, dt.procs[idx], part_rows))
         beg_row = end_row+1
     end
     dt_keep_inds = DDataFrame(split_inds, dt.procs)
@@ -500,8 +500,8 @@ isequal(a::DDataFrame, b::DDataFrame) = ==(a::DDataFrame, b::DDataFrame)
 
 nrow(dt::DDataFrame) = sum(dt.nrows)
 ncol(dt::DDataFrame) = dt.ncols
-head(dt::DDataFrame) = remotecall_fetch(dt.procs[1], x->head(fetch(x)), dt.rrefs[1])
-tail(dt::DDataFrame) = remotecall_fetch(dt.procs[end], x->tail(fetch(x)), dt.rrefs[end])
+head(dt::DDataFrame) = remotecall_fetch(x->head(fetch(x)), dt.procs[1], dt.rrefs[1])
+tail(dt::DDataFrame) = remotecall_fetch(x->tail(fetch(x)), dt.procs[end], dt.rrefs[end])
 colnames(dt::DDataFrame) = dt.colindex.names
 function colnames!(dt::DDataFrame, vals) 
     pmap(x->colnames!(fetch(x), vals), Block(dt))

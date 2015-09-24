@@ -69,7 +69,7 @@ end
 function matrixpart_get(blk)
     refpid = blk.r.where # get the pid of the master process
     # TODO: need a way to avoid unnecessary remotecalls after the initial fetch
-    remotecall_fetch(refpid, ()->matrixpart_get(blk, myid()))
+    remotecall_fetch(()->matrixpart_get(blk, myid()), refpid)
 end
 
 function matrixpart_get(blk, pid)
@@ -81,7 +81,7 @@ end
 
 function matrixpart_set(blk, part_ref)
     refpid = blk.r.where # get the pid of the master process
-    remotecall_wait(refpid, ()->matrixpart_set(blk, myid(), part_ref))
+    remotecall_wait(()->matrixpart_set(blk, myid(), part_ref), refpid)
 end
 
 function matrixpart_set(blk, pid, part_ref)
@@ -120,7 +120,8 @@ function matrixpart_create(blk::DenseMatrixPart)
     A[part_range...]
 end
 
-function convert(::Type{DenseMatrix}, r::Block{RandomMatrix})
+convert{T}(::Type{DenseMatrix}, r::Block{RandomMatrix{T}}) = convert(DenseMatrix{T}, r)
+function convert{T}(::Type{DenseMatrix{T}}, r::Block{RandomMatrix{T}})
     A = r.source
     ret = zeros(eltype(A), size(A))
     for blk in blocks(r)
@@ -140,8 +141,8 @@ type MatOpBlock
         s1 = size(m1)
         s2 = size(m2)
 
-        (0 == np) && (np = nprocs())
-        np = min(s1..., s2..., np)
+        (0 == np) && (np = nworkers())
+        np = min(max(s1...), max(s2...), np)
 
         (splits1, splits2) = (oper == :*) ? matop_block_mul(s1, s2, np) : error("operation $oper not supported")
 
@@ -199,12 +200,12 @@ end
 # Output:
 #   - tuples of ranges to split each matrix into, suitable for block multiplication
 function matop_block_mul(s1::Tuple, s2::Tuple, np::Int)
-    fc = common_factor_around(@compat(round(Int,min(s1[2],s2[1])/np)), s1[2], s2[1])
-    f1 = common_factor_around(@compat(round(Int,s1[1]/np)), s1[1])
-    f2 = common_factor_around(@compat(round(Int,s2[2]/np)), s2[2])
+    fc = common_factor_around(round(Int,min(s1[2],s2[1])/np), s1[2], s2[1])
+    f1 = common_factor_around(round(Int,s1[1]/np), s1[1])
+    f2 = common_factor_around(round(Int,s2[2]/np), s2[2])
 
-    splits1 = mat_split_ranges(s1, @compat(round(Int,s1[1]/f1)), @compat(round(Int,s1[2]/fc))) # splits1 is f1 x fc blocks
-    splits2 = mat_split_ranges(s2, @compat(round(Int,s2[1]/fc)), @compat(round(Int,s2[2]/f2))) # splits2 is fc x f2 blocks
+    splits1 = mat_split_ranges(s1, round(Int,s1[1]/f1), round(Int,s1[2]/fc)) # splits1 is f1 x fc blocks
+    splits2 = mat_split_ranges(s2, round(Int,s2[1]/fc), round(Int,s2[2]/f2)) # splits2 is fc x f2 blocks
     (tuple(splits1...), tuple(splits2...))
 end
 

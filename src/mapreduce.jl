@@ -40,7 +40,7 @@ function pmap(m, bf::Block...; kwargs...)
     end
 
     donelist = falses(n1)
-    np = nprocs()
+    np = nworkers()
     results = cell(n1)
 
     # function to produce the next work item from the queue.
@@ -60,18 +60,17 @@ function pmap(m, bf::Block...; kwargs...)
         (n == :fetch_results) && (fetch_results = v)
     end
     @sync begin
+        wrkrs = workers()
         for p=1:np
-            wpid = Base.PGRP.workers[p].id
-            if wpid != myid() || np == 1
-                @async begin
-                    while true
-                        idx = nextidx(wpid)
-                        (idx == 0) && break
-                        #println("processor $(wpid) got idx $idx ... preparing data...")
-                        d = [(prepare[bid])((blks[bid])[idx]) for bid in 1:length(blks)]
-                        #println("processor $(wpid) preapred idx $idx")
-                        results[idx] = fetch_results ? remotecall_fetch(wpid, fc, d...) : remotecall_wait(wpid, fc, d...)
-                    end
+            wpid = wrkrs[p]
+            @async begin
+                while true
+                    idx = nextidx(wpid)
+                    (idx == 0) && break
+                    #println("processor $(wpid) got idx $idx ... preparing data...")
+                    d = [(prepare[bid])((blks[bid])[idx]) for bid in 1:length(blks)]
+                    #println("processor $(wpid) preapred idx $idx")
+                    results[idx] = fetch_results ? remotecall_fetch(fc, wpid, d...) : remotecall_wait(fc, wpid, d...)
                 end
             end
         end

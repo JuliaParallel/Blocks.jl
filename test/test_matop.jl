@@ -1,5 +1,5 @@
 using Base.Test
-const NPROCS = isempty(ARGS) ? 4 : int(ARGS[1])
+const NPROCS = isempty(ARGS) ? 4 : parse(Int, ARGS[1])
 
 
 function do_mul()
@@ -71,8 +71,8 @@ function do_rand_mul()
     #rmprocs(workers())
 
     println("calculating locally...")
-    la1 = convert(DenseMatrix, mb.ms1)
-    la2 = convert(DenseMatrix, mb.ms2)
+    la1 = convert(DenseMatrix, mb.mb1)
+    la2 = convert(DenseMatrix, mb.mb2)
     t2 = @elapsed (tr = la1*la2)
 
     println("verifying...")
@@ -84,7 +84,7 @@ end
 
 println("adding $NPROCS more processors...")
 addprocs(NPROCS)
-println("\tnprocs: $(nprocs())")
+println("\tnworkers: $(nworkers())")
 println("loading packages...")
 using Blocks
 using Blocks.MatOp
