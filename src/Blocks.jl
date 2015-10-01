@@ -9,7 +9,7 @@ import      Base: peek, throwto, open
 if isless(Base.VERSION, v"0.4.0-")
 import      Base: AsyncStream, localpart
 typealias LibuvStream AsyncStream
-elseif isless(Base.VERSION, v"0.5.0-")
+elseif isless(Base.VERSION, v"0.4.0-rc3+30")
 import      Base: AsyncStream, |>
 typealias LibuvStream AsyncStream
 else

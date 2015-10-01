@@ -61,7 +61,7 @@ do_all_tests()
 
 println("adding 3 more processors...")
 addprocs(3)
-println("\tnprocs: $(nprocs())")
+println("\tnworkers: $(nworkers())")
 load_pkgs()
 do_all_tests()
 

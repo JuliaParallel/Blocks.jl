@@ -1,6 +1,6 @@
 function block_pmap(f, lsts...; err_retry=true, err_stop=false, fetch_results=true)
     len = length(lsts)
-    np = nprocs()
+    np = nworkers()
     retrycond = Condition()
 
     results = Dict{Int,Any}()
@@ -43,29 +43,28 @@ function block_pmap(f, lsts...; err_retry=true, err_stop=false, fetch_results=tr
 
     pt = Task(producer)
     @sync begin
+        wrkrs = workers()
         for p=1:np
-            wpid = Base.PGRP.workers[p].id
-            if wpid != myid() || np == 1
-                @async begin
-                    for (idx,nxtvals) in pt
-                        try
-                            if fetch_results
-                                result = remotecall_fetch(wpid, f, nxtvals...)
-                                isa(result, Exception) ? rethrow(result) : setresult(idx, result)
+            wpid = wrkrs[p]
+            @async begin
+                for (idx,nxtvals) in pt
+                    try
+                        if fetch_results
+                            result = remotecall_fetch(f, wpid, nxtvals...)
+                            isa(result, Exception) ? rethrow(result) : setresult(idx, result)
+                        else
+                            result_ref = remotecall_wait(f, wpid, nxtvals...)
+                            if err_stop || err_retry        # avoid fetching the type if we won't use it
+                                result_type = remotecall_fetch((x)->typeof(fetch(x)), wpid, result_ref)
+                                isa(result_type, Exception) ? rethrow(fetch(result_ref)) : setresult(idx, result_ref)
                             else
-                                result_ref = remotecall_wait(wpid, f, nxtvals...)
-                                if err_stop || err_retry        # avoid fetching the type if we won't use it
-                                    result_type = remotecall_fetch(wpid, (x)->typeof(fetch(x)), result_ref)
-                                    isa(result_type, Exception) ? rethrow(fetch(result_ref)) : setresult(idx, result_ref)
-                                else
-                                    setresult(idx, result_ref)
-                                end
+                                setresult(idx, result_ref)
                             end
-                        catch ex
-                            err_retry ? retry(idx,nxtvals,ex) : setresult(idx, ex)
-                            set_task_in_error()
-                            break # remove this worker from accepting any more tasks
                         end
+                    catch ex
+                        err_retry ? retry(idx,nxtvals,ex) : setresult(idx, ex)
+                        set_task_in_error()
+                        break # remove this worker from accepting any more tasks
                     end
                 end
             end
