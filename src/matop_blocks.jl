@@ -6,7 +6,7 @@ using Compat
 importall Blocks
 importall Base
 
-export MatOpBlock, Block, RandomMatrix, op, convert, *
+export MatOpBlock, Block, RandomMatrix, DSparseMatrix, op, convert, *
 
 ##
 # RamdomMatrix: A way to represent distributed memory random matrix that is easier to work with blocks
@@ -18,6 +18,17 @@ type RandomMatrix{T} <: AbstractMatrix{T}
 end
 eltype{T}(m::RandomMatrix{T}) = T
 size(m::RandomMatrix) = m.dims
+
+##
+# DSparseMatrix: A way to represent distributed sparse matrix that is easier to work with blocks
+# Holds remote refs to parts
+type DSparseMatrix{Tv,Ti} <: AbstractMatrix{Tv}
+    t::Type{Tv}
+    dims::NTuple{2,Ti}
+    refs::Array{RemoteRef}
+end
+eltype(ds::DSparseMatrix) = ds.t
+size(ds::DSparseMatrix) = ds.dims
 
 ##
 # MatrixSplits hold remote refs of parts of the matrix, along with the matrix definition
@@ -66,10 +77,32 @@ function Block(A::RandomMatrix, splits::Tuple)
     Block(A, blks, Blocks.no_affinity, as_it_is, as_it_is)
 end
 
+##
+# Block definition on DSparseMatrix
+type DSparseMatrixPart
+    r::RemoteRef
+    split::Tuple
+end
+
+function Block(A::DSparseMatrix, splits::Tuple)
+    msplits = MatrixSplits(A, Dict())
+    r = RemoteRef()
+    put!(r, msplits)
+    blks = [DSparseMatrixPart(r, split) for split in splits]
+    Block(A, blks, Blocks.no_affinity, as_it_is, as_it_is)
+end
+
+const _cache = Dict()
 function matrixpart_get(blk)
+    get(_cache, blk) do
+        _matrixpart_get(blk)
+    end
+end
+
+function _matrixpart_get(blk)
     refpid = blk.r.where # get the pid of the master process
     # TODO: need a way to avoid unnecessary remotecalls after the initial fetch
-    remotecall_fetch(()->matrixpart_get(blk, myid()), refpid)
+    remotecall_fetch(matrixpart_get, refpid, blk, myid())
 end
 
 function matrixpart_get(blk, pid)
@@ -80,8 +113,9 @@ function matrixpart_get(blk, pid)
 end
 
 function matrixpart_set(blk, part_ref)
+    _cache[blk] = part_ref
     refpid = blk.r.where # get the pid of the master process
-    remotecall_wait(()->matrixpart_set(blk, myid(), part_ref), refpid)
+    remotecall_wait(matrixpart_set, refpid, blk, myid(), part_ref)
 end
 
 function matrixpart_set(blk, pid, part_ref)
@@ -120,6 +154,18 @@ function matrixpart_create(blk::DenseMatrixPart)
     A[part_range...]
 end
 
+function matrixpart_create(blk::DSparseMatrixPart)
+    splits = fetch(blk.r)
+    A = splits.m
+    # find the local part
+    for ref in A.refs
+        if ref.where == myid()
+            return fetch(ref)
+        end
+    end
+    spzeros(A.t, typeof(A.dims).types[1], A.dims...)
+end
+
 convert{T}(::Type{DenseMatrix}, r::Block{RandomMatrix{T}}) = convert(DenseMatrix{T}, r)
 function convert{T}(::Type{DenseMatrix{T}}, r::Block{RandomMatrix{T}})
     A = r.source
@@ -150,6 +196,14 @@ type MatOpBlock
         mb2 = Block(m2, splits2)
         new(mb1, mb2, oper)
     end
+
+    function MatOpBlock(m1::DSparseMatrix, m2::AbstractMatrix, oper::Symbol, np::Int=0)
+        splits1 = tuple([mat_split_ranges(size(m1), 1, 1)[1] for p in 1:np]...)
+        splits2 = tuple(mat_split_ranges(size(m2), 1, 1)[1])
+        mb1 = Block(m1, splits1)
+        mb2 = Block(m2, splits2)
+        new(mb1, mb2, oper)
+    end
 end
 
 function Block(mb::MatOpBlock)
@@ -157,7 +211,11 @@ function Block(mb::MatOpBlock)
     error("operation $(mb.oper) not supported")
 end
 
-op{T<:MatOpBlock}(blk::Block{T}) = (eval(blk.source.oper))(blk)
+function op{T<:MatOpBlock}(blk::Block{T})
+    result = (eval(blk.source.oper))(blk)
+    empty!(_cache)
+    result
+end
 
 ##
 # internal methods
@@ -233,6 +291,20 @@ end
 
 ##
 # operations
+function _mul_map(t)
+    result_range, mat1_range, mat2_range = t
+    mat1_part = matrixpart(mat1_range)
+    mat2_part = matrixpart(mat2_range)
+    result = mat1_part * mat2_part
+    result_range, result
+end
+
+function _mul_reduce(v, t)
+    result_range, result = t
+    v[result_range...] += result
+    v
+end
+
 function *{T<:MatOpBlock}(blk::Block{T})
     mb = blk.source
     m1 = mb.mb1.source
@@ -242,7 +314,7 @@ function *{T<:MatOpBlock}(blk::Block{T})
     restype = promote_type(eltype(m1), eltype(m2))
     res = zeros(restype, m1size[1], m2size[2])
 
-    pmapreduce((t)->(t[1], matrixpart(t[2])*matrixpart(t[3])), (v,t)->begin v[t[1]...] += t[2]; v; end, res, blk)
+    pmapreduce(_mul_map, _mul_reduce, res, blk)
     res
 end
 
