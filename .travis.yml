@@ -1,16 +1,14 @@
-language: cpp
-compiler: 
-    - clang
+language: julia
+os:
+    - osx
+    - linux
+julia:
+    - nightly
+    - 0.4
 notifications:
-    email: true
-before_install:
-    - sudo add-apt-repository ppa:staticfloat/julia-deps -y
-    - sudo add-apt-repository ppa:staticfloat/julianightlies -y
-    - sudo apt-get update -qq -y
-    - sudo apt-get install libpcre3-dev julia -y
-    - git config --global user.name "Travis User"
-    - git config --global user.email "travis@example.net"
+    email: false
 script:
-    - julia -e 'Pkg.init(); run(`ln -s $(pwd()) $(Pkg.dir("Blocks"))`); Pkg.pin("Blocks"); Pkg.resolve()'
-    - julia -e 'using Blocks; @assert isdefined(:Blocks); @assert typeof(Blocks) === Module'
-    - julia ./test/runtests.jl
+    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+    - julia -e 'Pkg.clone(pwd()); Pkg.build("Blocks"); Pkg.test("Blocks"; coverage=true)';
+after_success:
+    - julia -e 'cd(Pkg.dir("Blocks")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())';
