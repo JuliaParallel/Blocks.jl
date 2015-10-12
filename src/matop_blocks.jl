@@ -197,6 +197,8 @@ type MatOpBlock
         new(mb1, mb2, oper)
     end
 
+    # TODO: remove assumption of splits covering the entire dimension (jush do a reshape?)
+    # TODO: allow DSparseMatrix * DSparseMatrix
     function MatOpBlock(m1::DSparseMatrix, m2::AbstractMatrix, oper::Symbol, np::Int=0)
         splits1 = tuple([mat_split_ranges(size(m1), 1, 1)[1] for p in 1:np]...)
         splits2 = tuple(mat_split_ranges(size(m2), 1, 1)[1])

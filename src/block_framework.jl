@@ -14,6 +14,7 @@ const loopbackip = IPv4(127,0,0,1)
 ##
 # Pipelined filters
 # TODO: relook at IO integration after IO enhancements in base
+# TODO: need types, instead of just tuples
 as_it_is(x) = x
 
 as_io(x) = open(x)

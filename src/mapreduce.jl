@@ -14,6 +14,7 @@ function map(m::Base.Callable, bf::Block...)
     map(fc, blks...)
 end
 
+# TODO: re-do using Channels
 function pmap(m, bf::Block...; kwargs...)
     affs = [x.affinity for x in bf]
     filters = [x.filter for x in bf]
@@ -78,7 +79,7 @@ function pmap(m, bf::Block...; kwargs...)
     results
 end
 
-
+# TODO: should have tree reduce as an option
 pmapreduce(m, r, bf::Block...) = reduce(r, pmap(m, bf...))
 function pmapreduce(m, r, v0, bf::Block...)
     results = pmap(m, bf...)

@@ -1,5 +1,6 @@
 ##
 # give a stream view to a block from any seekable iostream
+# TODO: shouldn't BlockIO be a IOSteam? why not?
 immutable BlockIO <: IO
     s::IO
     r::UnitRange

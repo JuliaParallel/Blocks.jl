@@ -1,3 +1,4 @@
+# TODO: re-do using Channels
 function block_pmap(f, lsts...; err_retry=true, err_stop=false, fetch_results=true)
     len = length(lsts)
     np = nworkers()
