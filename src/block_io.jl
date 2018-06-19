@@ -9,6 +9,7 @@ immutable BlockIO <: IO
         seekend(bio)
         try
             while(!eof(bio.s) && (end_byte != read(bio, UInt8))) continue end
+        catch
         end
         position(bio.s)
     end
